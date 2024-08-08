@@ -1,0 +1,6 @@
+# ignore these files
+*.npz
+*.log
+*.err
+*.job
+
