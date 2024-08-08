@@ -5,9 +5,11 @@ import torch.nn.functional as F
 import numpy as np
 import dgl
 from dgl.nn.pytorch.conv import EGNNConv
-from torch_geometric.nn import Set2Set
+#from torch_geometric.nn import Set2Set
 from torch_geometric.utils import add_self_loops, negative_sampling
-from mask import MaskEdge
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from src.mask import MaskEdge
 
 class Encoder(nn.Module):
     def __init__(self,

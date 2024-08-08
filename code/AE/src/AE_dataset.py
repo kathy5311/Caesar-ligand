@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import time
-from .features import FUNCS_TYPE, ELEMS_TYPE
+#from .features import FUNCS_TYPE, ELEMS_TYPE
 
 class DataSet(torch.utils.data.Dataset):
     def __init__(self, targets, datanpz):

@@ -3,8 +3,10 @@ import torch
 import sys,os
 import torch.nn.functional as F
 from torch import nn
-from .model_0711 import EntropyModel
-from .dataset_0711 import DataSet, collate
+from model.AE_model import EntropyModel
+import os,sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from src.AE_dataset import DataSet, collate
 from torch.utils import data
 
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -13,7 +15,7 @@ device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 class Arguments:
     def __init__(self):
         self.batchsize = 5
-        self.maxepochs = 100
+        self.maxepochs = 10
         self.LR = 1.0e-4
         self.W_REG = 0.0001
         self.trainlist = 'data/trainlist.npy'
@@ -24,7 +26,7 @@ args = Arguments()
 set_params = {'datanpz':'data/test.npz'
               }#use default
 
-model_params = {'input_dim': 17, #9 elems + 4 funcs + 4 nH
+model_params = {'input_dim': 38, #9 elems + 16 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
                 'latent_dim': 2
                 }
 
@@ -53,7 +55,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         per_category_weight = torch.ones(model_params['input_dim']).to(device)
         weight = torch.einsum('ij,k->ijk',mask,per_category_weight)
 
-        pred_concat = torch.cat([pred['elem'],pred['func'],pred['nH']],dim=-1) # channel dimension
+        pred_concat = torch.cat([pred['elem'],pred['func'],pred['numH'],pred['aromatic'],pred['numCH3'],pred['ring'],pred['hybrid']],dim=-1) # channel dimension
 
         loss_recon = (weight*lossfunc( obt, pred_concat )).sum() # B x N x C ->
         loss_recon = loss_recon / mask.sum()
@@ -74,12 +76,17 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
                     label = obt[b,:n,:]
                     print(tag)
                     for i in range(n):
+                        #두 개 이상의 속성에 해당 될 수 있을 경우 부등호로 표현
                         print(i,
-                              'elem:',int(torch.argmax(pred[i,:9])),int(torch.argmax(label[i,:9])),
-                              'func:',[int(a) for a in (pred[i,9:13]>0.5)], [int(a) for a in (label[i,9:13]>0.5)],
-                              'nH:',int(torch.argmax(pred[i,13:])),int(torch.argmax(label[i,13:]))
+                              'elem:',[int(a) for a in (pred[i,:9]>0.5)],[int(a) for a in (label[i,:9]>0.5)],
+                              'func:',[int(a) for a in (pred[i,9:25]>0.5)], [int(a) for a in (label[i,9:25]>0.5)],
+                              'numH:',int(torch.argmax(pred[i,25:30])),int(torch.argmax(label[i,13:30])),
+                              'aromatic',int(pred[i,30]), int(label[i,30]),
+                              'numCH3', int(pred[i,31]), int(label[i,31]),
+                              'ring', int(pred[i,32]), int(label[i,32]),
+                              'hybrid', int(torch.argmax(pred[i,32:])),int(torch.argmax(label[i,32:]))
                         )
-
+#0809 여기부터 수정 시작해라
         temp_loss["total"].append(loss.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["recon"].append(loss_recon.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["entropy"].append(loss_S.cpu().detach().numpy()) #store as per-sample loss
