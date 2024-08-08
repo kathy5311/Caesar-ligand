@@ -9,7 +9,7 @@ class AutoEncoder(nn.Module):
                  nhead = 4,
                  decoder_dim = 128,
                  latent_dim = 4,
-                 output_dim = {'func':4, 'elem':9, 'nH':4},
+                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5},
                  nlayer_encoder=1,
                  nlayer_decoder=1):
         super().__init__()
@@ -26,7 +26,12 @@ class AutoEncoder(nn.Module):
 
         self.linear_elem = nn.Linear( c, output_dim['elem'] )
         self.linear_func = nn.Linear( c, output_dim['func'] )
-        self.linear_nH = nn.Linear( c, output_dim['nH'])
+        self.linear_nH = nn.Linear( c, output_dim['numH'])
+        self.linear_aroma = nn.Linear(c, output_dim['aromatic'])
+        self.linear_numCH3 = nn.Linear(c, output_dim['numCH3'])
+        self.linear_ring = nn.Linear(c, output_dim['ring'])
+        self.linear_hybrid = nn.Linear(c, output_dim['hybrid'])
+        
 
     def forward(self, x):
 
@@ -36,7 +41,11 @@ class AutoEncoder(nn.Module):
         pred = {}
         pred['elem'] = self.linear_elem(h)
         pred['func'] = self.linear_func(h)
-        pred['nH'] = self.linear_nH(h)
+        pred['numH'] = self.linear_nH(h)
+        pred['aromatic'] = self.linear_aroma(h)
+        pred['numCH3'] = self.linear_numCH3(h)
+        pred['ring'] = self.linear_ring(h)
+        pred['hybrid'] = self.linear_hybrid(h)
         
         #pred_border = self.linear_border(h_pair)
         return pred, z
@@ -47,7 +56,7 @@ class EntropyModel(nn.Module):
                  c = 32, #latent dimension
                  nhead = 4,
                  decoder_dim = 128,
-                 output_dim = {'func':4, 'elem':9, 'nH':4, 'entropy':1},
+                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5, 'entropy':1},
                  latent_dim = 4,
                  nlayer_encoder=1,
                  nlayer_decoder=1):
