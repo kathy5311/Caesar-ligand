@@ -1,6 +1,6 @@
 import numpy as np
 
-f='./src/new_npz0718/test_subset_rev0718_2.npz'
+f='test_subset_rev0718_2.npz'
 
 data=np.load(f, allow_pickle=True)
 
