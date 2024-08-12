@@ -1,3 +1,179 @@
 #new_ train
+import os
+import sys
+from model.model import EntropyModel
+current_dir = os.path.dirname(os.path.abspath(__file__))
+#print(current_dir)
+sys.path.append(os.path.join('/home/kathy531/Caesar-lig/code/MaskGAE/'))
+from src.dataset import DataSet, collate
+from src.loss import KL_div, ce_loss
+from src.args import args_default as args
+
 import torch
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+
+args.modelname ='prac'
+def load_model(args_in, silent =False):
+    device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
+    ## model
+    model = EntropyModel(args_in, device)
+    model.to(device)
+
+    ## loss
+    train_loss_empty = {"total":[], "lossKL":[], "lossCE":[]}
+    valid_loss_empty = {"total":[], "lossKL":[], "lossCE":[]}
+    
+    epoch =0
+    optimizer = torch.optim.Adam(model.parameters(), lr = args_in.LR, weight_decay=1e-5)
+    
+    if os.path.exists("models/%s/model.pkl"%args_in.modelname):
+        if not silent: print("Loading a checkpoint")
+        checkpoint = torch.load(os.path.join("models", args_in.modelname, "model.pkl"), map_location=device)
+        
+        trained_dict ={}
+        model_dict = model.state_dict() #state_dict: 매개변수를 포함하는 딕셔너리객체
+        model_keys = list(model_dict.keys())
+        
+        for key in checkpoint["model_state_dict"]:
+            if key in model_keys:
+                wts = checkpoint["model_state_dict"][key]
+                trained_dict[key] = wts
+            else:
+                print("skip", key)
+        
+        model.load_state_dict(trained_dict, strict = False)
+        
+        epoch = checkpoint["epoch"]+1
+        train_loss = checkpoint['train_loss']
+        valid_loss = checkpoint['valid_loss']
+        if not silent: print("Restarting at epoch", epoch)
+        
+    else:
+        if not silent: print("Training a new model")
+        train_loss = train_loss_empty
+        valid_loss = valid_loss_empty
+        
+        modelpath = os.path.join("/home/kathy531/Caesar-lig/code/MaskGAE/scripts/models", args_in.modelname)
+        if not os.path.isdir(modelpath):
+            if not silent: print("Creating a new dir at", modelpath)
+            os.mkdir(modelpath)
+            
+    if not silent:
+        nparams = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print("Nparams:", nparams)
+        
+    return model, optimizer, epoch, train_loss, valid_loss
+
+def load_data(dataf):
+    loader_params ={
+        'shuffle': True,
+        'num_workers': 10,
+        'pin_memory': True,
+        'collate_fn': collate,
+        'batch_size': args.nbatch,
+        'worker_init_fn': np.random.seed()
+    }
+    
+    trainset = DataSet(args.dataf_train, args)
+    validset = DataSet(args.dataf_valid, args)
+    
+    train_loader = torch.utils.data.DataLoader(trainset, **loader_params)
+    valid_loader = torch.utils.data.DataLoader(validset, **loader_params)
+
+    return train_loader, valid_loader
+
+def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
+    loss_tmp = {'total':[], 'lossKL':[], 'lossCE':[]}
+    device = model.device
+    
+    nerr =0
+    
+    for i,(G, mask, info) in enumerate(data_loader):
+        if type(G) != list:
+            entropy, mu, logvar, posout, negout = model(G.to(device))
+            if mu ==None: continue
+            
+            mask = mask.to(device)
+            
+            Ssum_pos = torch.sum(torch.einsum('bij,ik->bjk',mask,posout),dim=1)
+            Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask,negout),dim=1)
+            
+            lossKL = KL_div(mu, logvar)
+            lossCE = ce_loss(Ssum_pos,Ssum_neg)
+            loss = lossKL+lossCE
+            
+            if train:
+                if (torch.isnan(loss).sum()==0):
+                    optimizer.zero_grad()
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
+                    optimizer.step()
+                else:
+                    pass
+            
+            if verbose:
+                verbl=''
+                for tag,ent,pos_out,neg_out in zip(info['target'], entropy, pos_out, neg_out):
+                    verbl += f"{tag:9s} {ent.item():.4f} {pos_out.item():.4f} {neg_out.item():.4f}"
+                print(verbl)
+            
+            loss_tmp['total'].append(loss.cpu().detach().numpy())
+            loss_tmp['lossCE'].append(lossCE.cpu().detach().numpy())
+            loss_tmp['lossKL'].append(lossKL.cpu().detach().numpy())
+            
+        else: continue
+    return loss_tmp
+
+def main():
+    model,optimizer,init_epoch,train_loss,valid_loss =load_model(args)
+    train_loader, valid_loader = load_data(args)
+    
+    for epoch in range(init_epoch, args.maxepoch):
+        print('epoch:', epoch)
+        
+        loss_t = run_an_epoch(model, optimizer, train_loader, True, verbose=True)
+        
+        for key in train_loss:
+            train_loss[key].append(np.array(loss_t[key]))
+        
+        with torch.no_grad():
+            model.eval()
+            loss_v = run_an_epoch(model, optimizer, valid_loader, False, (args.verbose and epoch==args.maxepoch-1))
+        
+        for key in valid_loss:
+            valid_loss[key].append(np.array(loss_v[key]))
+            
+        print("Train/Valid: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['total'])),
+                                              float(np.mean(loss_v['total']))))
+                
+        if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'valid_loss': valid_loss,
+            }, os.path.join("models", args.modelname, "best.pkl"))
+
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_loss,
+            'valid_loss': valid_loss,
+        }, os.path.join("models", args.modelname, "model.pkl"))
+            
+
+if __name__ == "__main__":
+    torch.set_num_threads( int( os.getenv('SLURM_CPUS_PER_TASK', 4) ) )
+    main()
+            
+            
+            
+            
+                    
+        
+        
+        
