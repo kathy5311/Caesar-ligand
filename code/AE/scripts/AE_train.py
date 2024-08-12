@@ -6,24 +6,24 @@ from torch import nn
 from model.AE_model import EntropyModel
 import os,sys
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from src.AE_dataset import DataSet, collate
+from src.AE_dataset_rev import DataSet, collate
 from torch.utils import data
-
+print(print(os.path.abspath(__file__)))
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
 class Arguments:
     def __init__(self):
         self.batchsize = 5
-        self.maxepochs = 10
+        self.maxepochs = 20
         self.LR = 1.0e-4
         self.W_REG = 0.0001
-        self.trainlist = 'data/trainlist.npy'
-        self.validlist = 'data/validlist.npy'
+        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_train.txt'
+        self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid.txt'
 
 args = Arguments()
 
-set_params = {'datanpz':'data/test.npz'
+set_params = {'datanpz':'/home/kathy531/Caesar-lig/data/new_npz0718/' #npz 경로 추가
               }#use default
 
 model_params = {'input_dim': 38, #9 elems + 16 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
@@ -44,6 +44,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
     lossfunc = nn.MSELoss( reduction='none' )
 
     for i, (obt, mask, S, info) in enumerate(loader):
+        if len(obt) == 0: continue
         if train: optimizer.zero_grad()
 
         obt = obt.to(device)
@@ -80,13 +81,13 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
                         print(i,
                               'elem:',[int(a) for a in (pred[i,:9]>0.5)],[int(a) for a in (label[i,:9]>0.5)],
                               'func:',[int(a) for a in (pred[i,9:25]>0.5)], [int(a) for a in (label[i,9:25]>0.5)],
-                              'numH:',int(torch.argmax(pred[i,25:30])),int(torch.argmax(label[i,13:30])),
+                              'numH:',int(torch.argmax(pred[i,25:30])),int(torch.argmax(label[i,25:30])),
                               'aromatic',int(pred[i,30]), int(label[i,30]),
                               'numCH3', int(pred[i,31]), int(label[i,31]),
                               'ring', int(pred[i,32]), int(label[i,32]),
                               'hybrid', int(torch.argmax(pred[i,32:])),int(torch.argmax(label[i,32:]))
                         )
-#0809 여기부터 수정 시작해라
+#0809 여기부터 수정 시작해라->check
         temp_loss["total"].append(loss.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["recon"].append(loss_recon.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["entropy"].append(loss_S.cpu().detach().numpy()) #store as per-sample loss
@@ -102,10 +103,10 @@ def load_model(modelname):
     epoch = 0
 
     model.to(device)
-    optimizer   = torch.optim.AdamW(model.parameters(), lr=args.LR)
+    optimizer   = torch.optim.AdamW(model.parameters(), lr=args.LR) #Adam + weight decay term(Not L2 regularization)
 
-    if os.path.exists("models/%s/model.pkl"%modelname):
-        checkpoint = torch.load("models/"+modelname+"/model.pkl", map_location=device)
+    if os.path.exists("/home/kathy531/Caesar-lig/code/AE/scripts/models/%s/model.pkl"%modelname):
+        checkpoint = torch.load("/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/model.pkl", map_location=device)
 
         model.load_state_dict(checkpoint["model_state_dict"],strict=False)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -115,15 +116,15 @@ def load_model(modelname):
         valid_loss = checkpoint["valid_loss"]
         print("Restarting at epoch", epoch)
     else:
-        if not os.path.exists("models/%s"%(modelname)):
+        if not os.path.exists("/home/kathy531/Caesar-lig/code/AE/scripts/models/%s"%(modelname)):
             print("Creating a new dir at models/%s"%modelname)
-            os.mkdir("models/"+modelname)
+            os.mkdir("/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname)
 
     return model, optimizer, epoch, train_loss, valid_loss
 
 def load_data():
-    trainlist = np.load(args.trainlist)
-    validlist = np.load(args.validlist)
+    trainlist = args.trainlist
+    validlist = args.validlist
 
     train_set = DataSet(trainlist, **set_params)
     train_loader = data.DataLoader(train_set,
@@ -165,15 +166,16 @@ def main():
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
-                'valid_loss': valid_loss}, "models/"+modelname+"/best.pkl")
+                'valid_loss': valid_loss}, "/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/best.pkl")
 
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
-            'valid_loss': valid_loss}, "models/"+modelname+"/model.pkl")
+            'valid_loss': valid_loss}, "/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/model.pkl")
 
 
 if __name__ =="__main__":
+    torch.set_num_threads( int( os.getenv('SLURM_CPUS_PER_TASK', 4) ) )
     main()
