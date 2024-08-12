@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from AE_transformer import TransformerEncoder, TransformerDecoder
+from .AE_transformer import *
 
 class AutoEncoder(nn.Module):
     def __init__(self,
@@ -30,7 +30,7 @@ class AutoEncoder(nn.Module):
         self.linear_aroma = nn.Linear(c, output_dim['aromatic'])
         self.linear_numCH3 = nn.Linear(c, output_dim['numCH3'])
         self.linear_ring = nn.Linear(c, output_dim['ring'])
-        self.linear_hybrid = nn.Linear(c, output_dim['hybrid'])
+        self.linear_hybrid = nn.Linear(c, output_dim['hybrid1hot'])
         
 
     def forward(self, x):
