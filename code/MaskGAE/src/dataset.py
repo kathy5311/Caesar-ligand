@@ -24,7 +24,7 @@ class DataSet(torch.utils.data.Dataset):
         data = np.load(npzf, allow_pickle=True)
         
         try:
-            G, mask = self.make_graph(data['features'][index])
+            G, mask = make_graph(data['features'][index])
         
         except:
             return None, None, None
@@ -105,7 +105,7 @@ def collate(samples):
         Gs.append(g)
         masks.append(m)
         njs.append(m.shape[1])
-        nfull == m.shape[0]
+        nfull += m.shape[0]
         for key in info: info[key].append(i[key])
 
     if len(Gs) == 0:

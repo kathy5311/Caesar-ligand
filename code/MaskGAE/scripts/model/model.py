@@ -6,10 +6,11 @@ import numpy as np
 import dgl
 from dgl.nn.pytorch.conv import EGNNConv
 #from torch_geometric.nn import Set2Set
-from torch_geometric.utils import add_self_loops, negative_sampling
+from torch_geometric.utils import add_self_loops, negative_sampling,to_undirected
+
 import sys, os
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from src.mask import MaskEdge
+sys.path.append("/home/kathy531/Caesar-lig/code/MaskGAE")
+#from src.mask import *
 
 class Encoder(nn.Module):
     def __init__(self,
@@ -113,9 +114,9 @@ class EdgeDecoder(nn.Module):
             self.mlps.append(nn.Linear(first_channels,second_chnnels))
         
         self.dropout = nn.Dropout(dropout)
-        self.activation = nn.RELU()
+        self.activation = nn.ReLU()
             
-    def forward( self, z, G: dgl.Graph, sigmoid=True, reduction=False):
+    def forward( self, z, G: dgl.DGLGraph, sigmoid=True, reduction=False):
         edge1 = G.edges()[0] #src edge_idx
         edge2 = G.edges()[1] #dst edge_idx
         x = z[edge1]*z[edge2]
@@ -177,20 +178,36 @@ class MaskGAE(nn.Module):
                                 latent_embedding_size = args.latent_embedding_size)
         
         self.edge_decoder = EdgeDecoder(in_channels=args.latent_embedding_size, hidden_channels=args.channels, out_channels=args.n_input_feats)
-        self.mask =mask
-        
+        self.mask = mask
         if random_negative_sampling:
             self.negative_sampler = random_negative_sampler
         else:
             self.negative_sampler = negative_sampling
-    def edge_index(self, g: dgl.Graph):
+    
+    def edge_index(self, g: dgl.DGLGraph):
         return torch.Tensor([g.edges()[0].tolist(), g.edges()[1].tolist()]) 
     
-    def forward(self, g: dgl.Graph):
+    def mask_edge(edge_index:torch.Tensor, p: float=0.7, undirected:bool=True):
+
+        if p<0 or p>1:
+            raise ValueError(f"Mask prob. has to be between 0 and 1, got {p}")
+
+        e_ids = torch.arange(edge_index.size(1), dtype=torch.long, device = edge_index.device)
+        mask = torch.full_like(e_ids, p, dtype=torch.float32) #p 값으로 e_ids차원만큼의 텐서를 만들어라
+        mask = torch.bernoulli(mask).to(torch.bool)
+        remaining_edges, masked_edge = edge_index[:,~mask], edge_index[:, mask]
+
+        if undirected:
+            remaining_edges = to_undirected(remaining_edges)
+        
+        return remaining_edges, masked_edge
+
+    def forward(self, g: dgl.DGLGraph):
         edge_index = self.edge_index(g)
         
         if self.mask is not None:
-            remaining_edges, masked_edges = MaskEdge(g)
+            #instance는 함수와 같이 사용할 수 없다. 즉, 인스턴트를 먼저 생성한 후, forward메서드를 호출하여 마스킹 작업 수행
+            remaining_edges, masked_edges = self.mask_edge(edge_index)
         
         aug_edge_index,_ = add_self_loops(edge_index)
         neg_edges = self.negative_sampler(
@@ -222,12 +239,12 @@ class EntropyModel(nn.Module):
         self.entropy_module = nn.ModuleList([nn.Linear(args.latent_embedding_size, output_dim)])
         
     def forward(self, x):
-        z, mu,logvar,_, _ =self.autoencoder(x)
+        z, mu,logvar,posout, negout =self.autoencoder(x)
         
         for layer in self.entropy_module:
             z = layer(z)
         entropy =z
         
-        return entropy, mu, logvar
+        return entropy, mu, logvar, posout, negout
         
         
