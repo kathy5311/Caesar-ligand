@@ -18,8 +18,8 @@ class Arguments:
         self.maxepochs = 20
         self.LR = 1.0e-4
         self.W_REG = 0.0001
-        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_train.txt'
-        self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid.txt'
+        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_train copy.txt'
+        self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid copy.txt'
 
 args = Arguments()
 
@@ -51,7 +51,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         mask = mask.to(device)
         pred, entropy = model( obt )
         tags = info['tags']
-
+        #print("S",S)
         # make uncustomized all-category-equal weight
         per_category_weight = torch.ones(model_params['input_dim']).to(device)
         weight = torch.einsum('ij,k->ijk',mask,per_category_weight)
@@ -67,7 +67,9 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         if train:
             loss.backward()
             optimizer.step()
-            if verbose: print(f"TRAIN Epoch {epoch} | Loss: {loss.item()} ")
+            if verbose: 
+                print(f"TRAIN Epoch {epoch} | Loss: {loss.item()} ")
+                #print(f"Entropy: {entropy}")
         else:
             if verbose:
                 print(f"VALID Epoch {epoch} | Loss: {loss.item()} ")
@@ -76,6 +78,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
                     pred = pred_concat[b,:n,:]
                     label = obt[b,:n,:]
                     print(tag)
+                    #print(f"Entropy: {entropy}")
                     for i in range(n):
                         #두 개 이상의 속성에 해당 될 수 있을 경우 부등호로 표현
                         print(i,
@@ -158,6 +161,13 @@ def main():
         print("Epoch %d, train/valid loss: %7.4f %7.4f"%((epoch,
                                                           np.mean(train_loss['total'][-1]),
                                                           np.mean(valid_loss['total'][-1]))))
+        print("Epoch %d, train/valid Reconloss: %7.4f %7.4f"%((epoch,
+                                                          np.mean(train_loss['recon'][-1]),
+                                                          np.mean(valid_loss['recon'][-1]))))
+        print("Epoch %d, train/valid Entropyloss: %7.4f %7.4f"%((epoch,
+                                                          np.mean(train_loss['entropy'][-1]),
+                                                          np.mean(valid_loss['entropy'][-1]))))
+
 
         # Update the best model if necessary:
         if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
