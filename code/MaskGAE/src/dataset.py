@@ -120,5 +120,5 @@ def collate(samples):
         ni, nj = m.shape
         mask[b,bi:bi+ni,:nj] = m
         bi += ni
-
+    #print("origin",mask.shape)
     return bG,  mask, info

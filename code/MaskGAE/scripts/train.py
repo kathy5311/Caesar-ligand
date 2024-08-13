@@ -14,7 +14,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-args.modelname ='prac'
+args.modelname ='prac_0813_rev2'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model
@@ -28,9 +28,9 @@ def load_model(args_in, silent =False):
     epoch =0
     optimizer = torch.optim.Adam(model.parameters(), lr = args_in.LR, weight_decay=1e-5)
     
-    if os.path.exists("models/%s/model.pkl"%args_in.modelname):
+    if os.path.exists("/home/kathy531/Caesar-lig/code/MaskGAE/scripts/models/%s/model.pkl"%args_in.modelname):
         if not silent: print("Loading a checkpoint")
-        checkpoint = torch.load(os.path.join("models", args_in.modelname, "model.pkl"), map_location=device)
+        checkpoint = torch.load(os.path.join("/home/kathy531/Caesar-lig/code/MaskGAE/scripts/models", args_in.modelname, "model.pkl"), map_location=device)
         
         trained_dict ={}
         model_dict = model.state_dict() #state_dict: 매개변수를 포함하는 딕셔너리객체
@@ -95,10 +95,17 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             entropy, mu, logvar, posout, negout = model(G.to(device))
             if mu ==None: continue
             
-            mask = mask.to(device)
-            
-            Ssum_pos = torch.sum(torch.einsum('bij,ik->bjk',mask,posout),dim=1)
-            Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask,negout),dim=1)
+            #mask reproducing: fit on posout,negout shape
+            mask_reduced = mask[:,:posout.size(0),:]
+            mask_reduced = mask_reduced.to(device)
+            '''
+            print("posout size", posout.shape)
+            print("mask size", mask.shape)
+            print("mask_reduced size", mask_reduced.shape)
+            print("negout size", negout.shape)
+            '''
+            Ssum_pos = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,posout),dim=1)
+            Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,negout),dim=1)
             
             lossKL = KL_div(mu, logvar)
             lossCE = ce_loss(Ssum_pos,Ssum_neg)
@@ -115,8 +122,8 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             
             if verbose:
                 verbl=''
-                for tag,ent,pos_out,neg_out in zip(info['target'], entropy, pos_out, neg_out):
-                    verbl += f"{tag:9s} {ent.item():.4f} {pos_out.item():.4f} {neg_out.item():.4f}"
+                for tag,ent in zip(info['target'], entropy):
+                    verbl += f"{tag:9s} {ent.item():.4f} "
                 print(verbl)
             
             loss_tmp['total'].append(loss.cpu().detach().numpy())
@@ -147,7 +154,12 @@ def main():
             
         print("Train/Valid: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['total'])),
                                               float(np.mean(loss_v['total']))))
-                
+
+        print("Train/Valid CE: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossCE'])),
+                                              float(np.mean(loss_v['lossCE']))))    
+        print("Train/Valid KL: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossKL'])),
+                                              float(np.mean(loss_v['lossKL']))))
+                           
         if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
             torch.save({
                 'epoch': epoch,
@@ -155,7 +167,7 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
                 'valid_loss': valid_loss,
-            }, os.path.join("models", args.modelname, "best.pkl"))
+            }, os.path.join("/home/kathy531/Caesar-lig/code/MaskGAE/scripts/models", args.modelname, "best.pkl"))
 
         torch.save({
             'epoch': epoch,
@@ -163,17 +175,9 @@ def main():
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
             'valid_loss': valid_loss,
-        }, os.path.join("models", args.modelname, "model.pkl"))
+        }, os.path.join("/home/kathy531/Caesar-lig/code/MaskGAE/scripts/models", args.modelname, "model.pkl"))
             
 
 if __name__ == "__main__":
     torch.set_num_threads( int( os.getenv('SLURM_CPUS_PER_TASK', 4) ) )
-    main()
-            
-            
-            
-            
-                    
-        
-        
-        
+    main()  

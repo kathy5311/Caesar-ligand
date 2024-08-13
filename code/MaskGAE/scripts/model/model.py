@@ -1,3 +1,9 @@
+'''
+error:
+  File "/home/kathy531/Caesar-lig/code/MaskGAE/scripts/model/model.py", line 192, in mask_edge
+    e_ids = torch.arange(edge_index.size(1), dtype=torch.long, device = edge_index.device)
+RuntimeError: Boolean value of Tensor with more than one value is ambiguous
+''' 
 from typing import Union, Optional, Dict, Tuple
 import torch
 import torch.nn as nn
@@ -37,8 +43,8 @@ class Encoder(nn.Module):
         self.activation = nn.GELU()
      
         #latent transform layers
-        self.mu_transform = nn.Linear(channels*2, self.latent_embedding_size) #why channels*2?
-        self.logvar_transform = nn.Linear(channels*2, self.latent_embedding_size)
+        self.mu_transform = nn.Linear(channels, self.latent_embedding_size) #why channels*2?
+        self.logvar_transform = nn.Linear(channels, self.latent_embedding_size)
     
     def reparametrize(self, mu, logvar):
            std = torch.exp(logvar)
@@ -47,9 +53,11 @@ class Encoder(nn.Module):
        
     def forward(self, G: dgl.DGLGraph, edge_index: torch.Tensor):
         node_feat = G.ndata['attr']
+        node_feat = node_feat.to(next(self.initial_node_embedding.parameters()).dtype)
+        
         edge_feat = G.edata['attr']
         xyz = G.ndata['xyz']
-        
+        #print(node_feat.type())
         node_feat = self.initial_node_embedding( node_feat ).squeeze()
         
         node_feat = self.dropout(node_feat) #dropout setting
@@ -57,9 +65,13 @@ class Encoder(nn.Module):
                                     node_feat=node_feat,
                                     edge_feat=edge_feat,
                                     coord_feat=xyz)
+        #print("subidx",edge_index)
+        #print(G.edges())
         #Use subgraph
-        G = G.edge_subgraph(edge_index)
+        sub_idx=(G.edge_ids(edge_index[0],edge_index[1]))
+        G = G.edge_subgraph(sub_idx)
         #latent transform layers
+        #print(node_feat.shape)
         mu = self.mu_transform(node_feat)
         logvar = self.logvar_transform(node_feat)
         z = self.reparametrize(mu,logvar)
@@ -116,10 +128,9 @@ class EdgeDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.activation = nn.ReLU()
             
-    def forward( self, z, G: dgl.DGLGraph, sigmoid=True, reduction=False):
-        edge1 = G.edges()[0] #src edge_idx
-        edge2 = G.edges()[1] #dst edge_idx
-        x = z[edge1]*z[edge2]
+    def forward( self, z, edge:torch.Tensor, sigmoid=True, reduction=False):
+
+        x = z[edge[0]]*z[edge[1]]
         
         if reduction:
             x =x.mean(1)
@@ -132,7 +143,8 @@ class EdgeDecoder(nn.Module):
         x = self.mlps[-1](x)
         
         if sigmoid:
-            return x.sigmoid()
+            sigmoid=nn.Sigmoid()
+            return sigmoid(x)
         else:
             return x
         
@@ -185,15 +197,13 @@ class MaskGAE(nn.Module):
             self.negative_sampler = negative_sampling
     
     def edge_index(self, g: dgl.DGLGraph):
-        return torch.Tensor([g.edges()[0].tolist(), g.edges()[1].tolist()]) 
+        edge_index=torch.Tensor([g.edges()[0].tolist(), g.edges()[1].tolist()]) 
+        return edge_index.to(self.device)
     
-    def mask_edge(edge_index:torch.Tensor, p: float=0.7, undirected:bool=True):
-
-        if p<0 or p>1:
-            raise ValueError(f"Mask prob. has to be between 0 and 1, got {p}")
+    def mask_edge(self, edge_index:torch.Tensor, p: float=0.7, undirected:bool=False):
 
         e_ids = torch.arange(edge_index.size(1), dtype=torch.long, device = edge_index.device)
-        mask = torch.full_like(e_ids, p, dtype=torch.float32) #p 값으로 e_ids차원만큼의 텐서를 만들어라
+        mask = torch.full(e_ids.size(), p, dtype=torch.float32, device = edge_index.device) #p 값으로 e_ids차원만큼의 텐서를 만들어라
         mask = torch.bernoulli(mask).to(torch.bool)
         remaining_edges, masked_edge = edge_index[:,~mask], edge_index[:, mask]
 
@@ -204,25 +214,26 @@ class MaskGAE(nn.Module):
 
     def forward(self, g: dgl.DGLGraph):
         edge_index = self.edge_index(g)
-        
+        #print("orgin idx", edge_index)
+        edge_index=edge_index.to(torch.long)
         if self.mask is not None:
             #instance는 함수와 같이 사용할 수 없다. 즉, 인스턴트를 먼저 생성한 후, forward메서드를 호출하여 마스킹 작업 수행
             remaining_edges, masked_edges = self.mask_edge(edge_index)
-        
+        #print("remaining", remaining_edges)
         aug_edge_index,_ = add_self_loops(edge_index)
         neg_edges = self.negative_sampler(
             aug_edge_index,
             num_nodes = g.num_nodes(),
-            num_neg_smaples = masked_edges.view(2,-1).size(1),
+            num_neg_samples = masked_edges.view(2,-1).size(1),
         ).view_as(masked_edges)
-        
+        #print('masked_edge', masked_edges)
         z, mu, logvar = self.encoder(g, remaining_edges)
-        
+        #print(z,mu,logvar)
         pos_out = self.edge_decoder(
-            z, masked_edges, sigmoid=True
+            z, masked_edges, sigmoid=False
         )
         
-        neg_out = self.edge_decoder(z, neg_edges, sigmoid =True)
+        neg_out = self.edge_decoder(z, neg_edges, sigmoid =False)
         return z, mu, logvar, pos_out, neg_out
         
 class EntropyModel(nn.Module):
@@ -237,13 +248,13 @@ class EntropyModel(nn.Module):
         self.device = device
         self.autoencoder = MaskGAE(args, device)
         self.entropy_module = nn.ModuleList([nn.Linear(args.latent_embedding_size, output_dim)])
-        
+        self.activation = nn.ReLU()
     def forward(self, x):
         z, mu,logvar,posout, negout =self.autoencoder(x)
         
         for layer in self.entropy_module:
             z = layer(z)
-        entropy =z
+        entropy = self.activation(z)
         
         return entropy, mu, logvar, posout, negout
         
