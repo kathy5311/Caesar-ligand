@@ -1,7 +1,8 @@
 #new_ train
 import os
 import sys
-from model.model import EntropyModel
+#model_edge로 바꿈!
+from model import EntropyModel
 current_dir = os.path.dirname(os.path.abspath(__file__))
 #print(current_dir)
 sys.path.append(os.path.join('/home/kathy531/Caesar-lig/code/MaskGAE/'))
@@ -14,7 +15,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-args.modelname ='prac_0813_rev2'
+args.modelname ='prac_0814'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model
@@ -106,9 +107,12 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             '''
             Ssum_pos = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,posout),dim=1)
             Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,negout),dim=1)
-            
+            #print(Ssum_pos, Ssum_neg)
+            #print(mu,logvar)
             lossKL = KL_div(mu, logvar)
+            #print('lossKL:',lossKL) 
             lossCE = ce_loss(Ssum_pos,Ssum_neg)
+            #print('lossCE',lossCE)
             loss = lossKL+lossCE
             
             if train:

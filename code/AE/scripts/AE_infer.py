@@ -50,7 +50,6 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         obt = obt.to(device)
         mask = mask.to(device)
         pred, entropy = model( obt )
-        #print(entropy)
         tags = info['tags']
         #print("S",S)
         # make uncustomized all-category-equal weight
@@ -102,90 +101,45 @@ def load_model(modelname):
     model = EntropyModel( **model_params )
     print("Num params: ", sum(p.numel() for p in model.parameters()))
 
-    train_loss = {'total':[],'recon':[],'entropy':[]}
-    valid_loss = {'total':[],'recon':[],'entropy':[]}
     epoch = 0
 
     model.to(device)
+    model_state=torch.load('/home/kathy531/Caesar-lig/code/AE/scripts/models/%s/best.pkl'%modelname)
+    model.load_state_dict(model_state['model_state_dict'],strict=False)
+    #print("Keys in model_state['model_state_dict']:", model_state['model_state_dict'].keys())
+    #print("Keys in model's state_dict:", model.state_dict().keys())
+    
     optimizer   = torch.optim.AdamW(model.parameters(), lr=args.LR) #Adam + weight decay term(Not L2 regularization)
 
-    if os.path.exists("/home/kathy531/Caesar-lig/code/AE/scripts/models/%s/model.pkl"%modelname):
-        checkpoint = torch.load("/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/model.pkl", map_location=device)
 
-        model.load_state_dict(checkpoint["model_state_dict"],strict=False)
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-        epoch = checkpoint["epoch"]+1
-        train_loss = checkpoint["train_loss"]
-        valid_loss = checkpoint["valid_loss"]
-        print("Restarting at epoch", epoch)
-    else:
-        if not os.path.exists("/home/kathy531/Caesar-lig/code/AE/scripts/models/%s"%(modelname)):
-            print("Creating a new dir at models/%s"%modelname)
-            os.mkdir("/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname)
-
-    return model, optimizer, epoch, train_loss, valid_loss
+    return model, optimizer, epoch
 
 def load_data():
-    trainlist = args.trainlist
+    #trainlist = args.trainlist
     validlist = args.validlist
 
-    train_set = DataSet(trainlist, **set_params)
-    train_loader = data.DataLoader(train_set,
-                                   worker_init_fn=lambda _: np.random.seed(),
-                                   **loader_params)
+    #train_set = DataSet(trainlist, **set_params)
+    #train_loader = data.DataLoader(train_set                               worker_init_fn=lambda _: np.random.seed(),**loader_params)
 
     valid_set = DataSet(validlist, **set_params)
     valid_loader = data.DataLoader(valid_set,
                                    worker_init_fn=lambda _: np.random.seed(),
                                    **loader_params)
 
-    return train_loader, valid_loader
+    return valid_loader
 
 def main():
-    train_loader, valid_loader = load_data()
+    valid_loader = load_data()
     modelname = sys.argv[1]
-    model, optimizer, start_epoch, train_loss, valid_loss = load_model( modelname )
+    model, optimizer, start_epoch = load_model( modelname )
 
     verbose = '-v' in sys.argv
 
     for epoch in range(start_epoch, args.maxepochs):
         
-        temp_loss = run_an_epoch(train_loader, model, optimizer, epoch, True)
-        for key in temp_loss:
-            train_loss[key].append(temp_loss[key])
-
-        with torch.no_grad():
-            temp_loss = run_an_epoch(valid_loader, model, optimizer, epoch, False, verbose=verbose)
-            for key in temp_loss:
-                valid_loss[key].append(temp_loss[key])
-
-        print("Epoch %d, train/valid loss: %7.4f %7.4f"%((epoch,
-                                                          np.mean(train_loss['total'][-1]),
-                                                          np.mean(valid_loss['total'][-1]))))
-        print("Epoch %d, train/valid Reconloss: %7.4f %7.4f"%((epoch,
-                                                          np.mean(train_loss['recon'][-1]),
-                                                          np.mean(valid_loss['recon'][-1]))))
-        print("Epoch %d, train/valid Entropyloss: %7.4f %7.4f"%((epoch,
-                                                          np.mean(train_loss['entropy'][-1]),
-                                                          np.mean(valid_loss['entropy'][-1]))))
+        run_an_epoch(valid_loader, model, optimizer, epoch, train=False,verbose=verbose)
 
 
-        # Update the best model if necessary:
-        if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'train_loss': train_loss,
-                'valid_loss': valid_loss}, "/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/best.pkl")
-
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'valid_loss': valid_loss}, "/home/kathy531/Caesar-lig/code/AE/scripts/models/"+modelname+"/model.pkl")
 
 
 if __name__ =="__main__":

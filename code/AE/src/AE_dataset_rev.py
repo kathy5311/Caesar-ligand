@@ -42,7 +42,14 @@ class DataSet(torch.utils.data.Dataset):
             #energy = data['energy'].astype(float)
             #xyz = data['xyz'].astype(float)
             #ent = data['ent'].astype(float)
-            numH = torch.Tensor(numH_encoding(data['numH']).astype(int))
+            numH = data['numH'].tolist()
+            numH_rev=[]
+            for i in numH:
+                sub=[i[0]-1,i[1]]
+                numH_rev.append(sub)
+    #print(numH)
+            numH = torch.Tensor(numH_encoding(numH_rev).astype(int))
+            #print(numH)
             #print(numH)
             aromatic = torch.Tensor(data['aromatic'].astype(bool)).unsqueeze(dim=1)
             #print(aromatic)

@@ -81,6 +81,7 @@ def make_graph(data):
     for i in numH:
         sub=[i[0]-1,i[1]]
         numH_rev.append(sub)
+    #print(numH)
     numH = torch.tensor(numH_encoding(numH_rev)).float()[:None]
 
     nodefeats=[elems, aromatic, numCH3, ring, FuncG, Hybrid, numH]
