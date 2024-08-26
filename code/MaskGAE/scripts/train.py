@@ -15,7 +15,7 @@ import numpy as np
 from torch.utils import data
 
 
-args.modelname ='train_0822_rev'
+args.modelname ='train_0822_t'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model
@@ -23,8 +23,9 @@ def load_model(args_in, silent =False):
     model.to(device)
 
     ## loss
-    train_loss_empty = {"total":[], "lossKL":[], "lossCE":[], "lossENT":[]}
-    valid_loss_empty = {"total":[], "lossKL":[], "lossCE":[], "lossENT":[]}
+    
+    train_loss_empty = {"total":[],  "lossCE":[], "lossENT":[]}
+    valid_loss_empty = {"total":[],  "lossCE":[], "lossENT":[]}
     
     epoch =0
     optimizer = torch.optim.Adam(model.parameters(), lr = args_in.LR, weight_decay=1e-5)
@@ -86,7 +87,7 @@ def load_data(dataf):
     return train_loader, valid_loader
 
 def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
-    loss_tmp = {'total':[], 'lossKL':[], 'lossCE':[], 'lossENT':[]}
+    loss_tmp = {'total':[], 'lossCE':[], 'lossENT':[]} #lossKL removal
     device = model.device
     
     nerr =0
@@ -100,31 +101,31 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             S = torch.stack(S)
             #print('entropy',entropy)
             #print(entropy['trans'].shape)
-            print('mask',mask)
-            print('mask shape',mask.shape)
+            #print('mask',mask)
+            #print('mask shape',mask.shape)
             mask = mask.to(device)
             S = S.to(device)
             #entropy masking
             
             per_entropy_weight = torch.ones(1).to(device)
+
             #print(per_entropy_weight.shape)
             weight = torch.einsum('bij,k->bik', mask, per_entropy_weight)
             entropy_concat = torch.cat([entropy_pred['vib'],entropy_pred['rot'],entropy_pred['conf'],entropy_pred['trans']],dim=-1)
-            #print('entropy concat', entropy_concat)
-            #mul_ent = weight*entropy_concat
+            #print('entropy concat', entropy_concat.shape)
+            mul_ent = weight*entropy_concat
             #print('ent[conf]',entropy_concat, entropy_concat.shape)
-            weight_1 = torch.sum(weight == 1.0)
-            #print('weight',weight[0],weight.shape)
+            #print('weight',weight,weight.shape)
+            #print('weight.sum',weight.sum())
             #print('weight_1', weight_1, weight_1.shape)
             #0823/ 마스킹 수정하자 근데 어떻게 하지....?
             #print('ent[trans]',entropy_pred['trans'],entropy_pred['trans'].shape)
             #print('mul_ent', mul_ent[0], mul_ent.shape)
-            mul_ent = torch.sum(entropy_concat,dim=0)
-            #print('mul_ent',mul_ent)
+            mul_ent = torch.sum(mul_ent,dim=1)
+            #print('mul_ent1',mul_ent,mul_ent.shape)
             #print('sum ent', mul_ent[0], mul_ent.shape)
             #print('S', S, S.shape)
             #print()
-
             #mask reproducing: fit on posout,negout shape
             mask_reduced = mask[:,:posout.size(0),:]
             mask_reduced = mask_reduced.to(device)
@@ -138,17 +139,18 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,negout),dim=1)
             #print(Ssum_pos, Ssum_neg)
             #print(mu,logvar)
-            lossKL = KL_div(mu, logvar)
+            #lossKL = KL_div(mu, logvar)
             #print('lossKL:',lossKL) 
             lossCE = ce_loss(Ssum_pos,Ssum_neg)
             #print('lossCE',lossCE)
             lossMSE = nn.MSELoss()
             lossENT = lossMSE(S,mul_ent).sum()
-            lossENT = lossENT/ mask.sum()
+            lossENT = lossENT/ weight.sum()
             #print('mask.sum',mask.sum())
+
             #print('lossENT Norm',lossENT)
 
-            loss = lossKL+lossCE+lossENT
+            loss = lossCE+lossENT #lossKL removal
             
             if train:
                 if (torch.isnan(loss).sum()==0):
@@ -165,7 +167,7 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
                 for tag,ent,S in zip(info['target'], mul_ent, S):
                     ent=ent.tolist()
                     S=S.tolist()
-                    verbl += f"{tag:9s} "+'\n'
+                    verbl += f"{tag:9s}\n"
                     verbl +='Vib:'+str(round(ent[0],4))+' '+str(round(S[0],4))
                     verbl +=' Rot:'+str(round(ent[1],4))+' '+str(round(S[1],4))
                     verbl+=' Conf:'+str(round(ent[2],4))+' '+str(round(S[2],4))
@@ -174,7 +176,7 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
             
             loss_tmp['total'].append(loss.cpu().detach().numpy())
             loss_tmp['lossCE'].append(lossCE.cpu().detach().numpy())
-            loss_tmp['lossKL'].append(lossKL.cpu().detach().numpy())
+            #loss_tmp['lossKL'].append(lossKL.cpu().detach().numpy())
             loss_tmp['lossENT'].append(lossENT.cpu().detach().numpy())
         else: continue
     return loss_tmp
@@ -203,8 +205,8 @@ def main():
 
         print("Train/Valid CE: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossCE'])),
                                               float(np.mean(loss_v['lossCE']))))    
-        print("Train/Valid KL: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossKL'])),
-                                              float(np.mean(loss_v['lossKL']))))
+        #print("Train/Valid KL: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossKL'])),
+                                              #float(np.mean(loss_v['lossKL']))))
         print("Train/Valid ENT: %3d %8.4f %8.4f"%(epoch, float(np.mean(loss_t['lossENT'])),
                                               float(np.mean(loss_v['lossENT']))))
                            
