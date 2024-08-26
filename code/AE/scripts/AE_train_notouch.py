@@ -1,13 +1,13 @@
-import time
+# 이 파일 절대 건들이지 마
 import numpy as np
 import torch
 import sys,os
 import torch.nn.functional as F
 from torch import nn
-from model.AE_model import EntropyModel
+from model.AE_model_notouch import EntropyModel
 import os,sys
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from src.AE_dataset_rev import DataSet, collate
+from src.AE_dataset_notouch import DataSet, collate
 from torch.utils import data
 print(print(os.path.abspath(__file__)))
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -19,8 +19,8 @@ class Arguments:
         self.maxepochs = 50
         self.LR = 1.0e-4
         self.W_REG = 0.0001
-        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/total_train_0823.txt'
-        self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/total_valid_0823.txt'
+        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_train copy.txt' #0821 데이터 축약 버전으로 실행
+        self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid copy.txt'
 
 args = Arguments()
 
@@ -28,7 +28,7 @@ set_params = {'datanpz':'/home/kathy531/Caesar-lig/data/new_npz0718/' #npz 경�
               }#use default
 
 model_params = {'input_dim': 38, #9 elems + 16 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
-                'latent_dim': 16
+                'latent_dim': 4
                 }
 
 
@@ -41,59 +41,36 @@ loader_params = {
 
 def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
     temp_loss = {'total':[],'recon':[],'entropy':[]}
-    
-    data_loading_time = 0.0
-    processing_time =0.0
 
     lossfunc = nn.MSELoss( reduction='none' )
 
     for i, (obt, mask, S, info) in enumerate(loader):
-        print(i, "starting epoch!")
-        start_time = time.time()
         if len(obt) == 0: continue
         if train: optimizer.zero_grad()
-        
-        data_loading_time += time.time()-start_time
-        start_time = time.time()
 
-        S = S.to(device) #내가 추가한거
+        
         obt = obt.to(device)
         #print('obt', obt)
         mask = mask.to(device)
-
-        pred, entropy_pred = model( obt ) #origin: pred,_=model(obt)
+        pred, entropy = model( obt ) #origin: pred,_=model(obt)
         #print('entropy_pred',entropy_pred)
         tags = info['tags']
         #print("S",S)
         # make uncustomized all-category-equal weight
         per_category_weight = torch.ones(model_params['input_dim']).to(device)
-        #print("category_size",per_category_weight.shape)
-        #print("mask size", mask.shape)
         weight = torch.einsum('ij,k->ijk',mask,per_category_weight)
-        #print('weight', weight)
+
         pred_concat = torch.cat([pred['elem'],pred['func'],pred['numH'],pred['aromatic'],pred['numCH3'],pred['ring'],pred['hybrid']],dim=-1) # channel dimension
 
-        #add entropy part
-        per_entropy_weight = torch.ones(1).to(device)
-        weight_entropy = torch.einsum('ij,k->ijk',mask,per_entropy_weight)
-
-        entropy_concat = torch.cat([entropy_pred['vib'],entropy_pred['rot'],entropy_pred['conf'],entropy_pred['trans']],dim=-1)
-        #print('ent_concat', entropy_concat)
-        entropy_weight= weight_entropy*entropy_concat
-        
-        entropy_weight = torch.sum(entropy_weight, dim=1)
-        
-        loss_recon = (weight*lossfunc( obt, pred_concat)).sum() # B x N x C ->
+        loss_recon = (weight*lossfunc( obt, pred_concat )).sum() # B x N x C ->
         loss_recon = loss_recon / mask.sum()
-        #print('loss_recon', loss_recon)
-        loss_S = (lossfunc(S, entropy_weight)).sum()
-        loss_S = loss_S / mask.sum()
 
-        #loss_S = torch.tensor(0.0).to(device)
+        loss_S = torch.tensor(0.0).to(device)
 
         loss = loss_recon + loss_S
         if train:
             loss.backward()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 5) #gradient clipping 추가
             optimizer.step()
             if verbose: 
                 print(f"TRAIN Epoch {epoch} | Loss: {loss.item()} ")
@@ -119,13 +96,10 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
                               'hybrid', int(torch.argmax(pred[i,32:])),int(torch.argmax(label[i,32:]))
                         )
 #0809 여기부터 수정 시작해라->check
-        processing_time += time.time() - start_time
-        
         temp_loss["total"].append(loss.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["recon"].append(loss_recon.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["entropy"].append(loss_S.cpu().detach().numpy()) #store as per-sample loss
-    print(f"Data loading time: {data_loading_time:.4f}")
-    print(f"Processing time: {processing_time: .4f}")
+
     return temp_loss
 
 def load_model(modelname):
@@ -137,6 +111,7 @@ def load_model(modelname):
     epoch = 0
 
     model.to(device)
+    
     optimizer   = torch.optim.AdamW(model.parameters(), lr=args.LR) #Adam + weight decay term(Not L2 regularization)
 
     if os.path.exists("/home/kathy531/Caesar-lig/code/AE/scripts/models/%s/model.pkl"%modelname):

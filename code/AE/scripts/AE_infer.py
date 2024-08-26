@@ -14,11 +14,11 @@ device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
 class Arguments:
     def __init__(self):
-        self.batchsize = 5
+        self.batchsize = 1
         self.maxepochs = 50
         self.LR = 1.0e-4
         self.W_REG = 0.0001
-        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_train.txt'
+        self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid.txt'
         self.validlist = '/home/kathy531/Caesar-lig/code/notebooks/check_valid.txt'
 
 args = Arguments()
@@ -27,7 +27,7 @@ set_params = {'datanpz':'/home/kathy531/Caesar-lig/data/new_npz0718/' #npz 경�
               }#use default
 
 model_params = {'input_dim': 38, #9 elems + 16 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
-                'latent_dim': 2
+                'latent_dim': 16
                 }
 
 
@@ -38,7 +38,7 @@ loader_params = {
     'collate_fn': collate,
     'batch_size': args.batchsize}
 
-def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
+def run_an_epoch(loader,model,optimizer,epoch,train=False,verbose=False):
     temp_loss = {'total':[],'recon':[],'entropy':[]}
 
     lossfunc = nn.MSELoss( reduction='none' )
@@ -47,21 +47,36 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         if len(obt) == 0: continue
         if train: optimizer.zero_grad()
 
+        S = S.to(device)
         obt = obt.to(device)
         mask = mask.to(device)
-        pred, entropy = model( obt )
+        pred, entropy_pred = model( obt )
+        #print(torch.sum(entropy))
         tags = info['tags']
         #print("S",S)
         # make uncustomized all-category-equal weight
         per_category_weight = torch.ones(model_params['input_dim']).to(device)
+        #print("category_size",per_category_weight.shape)
+        #print("mask size", mask.shape)
         weight = torch.einsum('ij,k->ijk',mask,per_category_weight)
-
+        #print('weight', weight)
         pred_concat = torch.cat([pred['elem'],pred['func'],pred['numH'],pred['aromatic'],pred['numCH3'],pred['ring'],pred['hybrid']],dim=-1) # channel dimension
 
-        loss_recon = (weight*lossfunc( obt, pred_concat )).sum() # B x N x C ->
-        loss_recon = loss_recon / mask.sum()
+        #add entropy part
+        per_entropy_weight = torch.ones(1).to(device)
+        weight_entropy = torch.einsum('ij,k->ijk',mask,per_entropy_weight)
 
-        loss_S = torch.tensor(0.0).to(device)
+        entropy_concat = torch.cat([entropy_pred['vib'],entropy_pred['rot'],entropy_pred['conf'],entropy_pred['trans']],dim=-1)
+        #print('ent_concat', entropy_concat)
+        entropy_weight= weight_entropy*entropy_concat
+        
+        entropy_weight = torch.sum(entropy_weight, dim=1)
+        
+        loss_recon = (weight*lossfunc( obt, pred_concat)).sum() # B x N x C ->
+        loss_recon = loss_recon / mask.sum()
+        #print('loss_recon', loss_recon)
+        loss_S = (lossfunc(S, entropy_weight)).sum()
+        loss_S = loss_S / mask.sum()
 
         loss = loss_recon + loss_S
         if train:
@@ -74,23 +89,30 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
             if verbose:
                 print(f"VALID Epoch {epoch} | Loss: {loss.item()} ")
                 natm = mask.sum(dim=-1).long()
+               
                 for b,(n,tag) in enumerate(zip(natm,tags)):
                     pred = pred_concat[b,:n,:]
                     label = obt[b,:n,:]
                     print(tag)
+                    print(entropy_weight)
+                    print(S)
                     #print(f"Entropy: {entropy}")
                     for i in range(n):
                         #두 개 이상의 속성에 해당 될 수 있을 경우 부등호로 표현
                         print(i,
-                              'elem:',[int(a) for a in (pred[i,:9]>0.5)],[int(a) for a in (label[i,:9]>0.5)],
-                              'func:',[int(a) for a in (pred[i,9:25]>0.5)], [int(a) for a in (label[i,9:25]>0.5)],
-                              'numH:',int(torch.argmax(pred[i,25:30])),int(torch.argmax(label[i,25:30])),
-                              'aromatic',int(pred[i,30]), int(label[i,30]),
-                              'numCH3', int(pred[i,31]), int(label[i,31]),
-                              'ring', int(pred[i,32]), int(label[i,32]),
-                              'hybrid', int(torch.argmax(pred[i,32:])),int(torch.argmax(label[i,32:]))
+                              'elem'+'_'+str([int(a) for a in (pred[i,:9]>0.5)])+'_'+str([int(a) for a in (label[i,:9]>0.5)])+'_'+
+                              'func_'+str([int(a) for a in (pred[i,9:25]>0.5)])+'_'+str([int(a) for a in (label[i,9:25]>0.5)])+'_'+
+                              'numH_'+str([int(a) for a in (pred[i,25:30]>0.5)])+'_'+str([int(a) for a in (label[i,25:30]>0.5)])+'_'+
+                              'aromatic_'+str(int(pred[i,30]))+'_'+str(int(label[i,30]))+'_'+
+                              'numCH3_'+str(int(pred[i,31]))+str(int(label[i,31]))+'_'+
+                              'ring_'+str(int(pred[i,32]))+'_'+str(int(label[i,32]))+'_'+
+                              'hybrid_'+str([int(a) for a in (pred[i,33:]>0.5)])+'_'+str(([int(a) for a in (label[i,33:]>0.5)])),     
                         )
-#0809 여기부터 수정 시작해라->check
+                    print('Vib_'+str(round(entropy_weight[0][0].item(),4))+'_'+str(round(S[0][0].item(),4))+
+                          '_Rot_'+str(round(entropy_weight[0][1].item(),4))+'_'+str(round(S[0][1].item(),4))+
+                          '_Conf_'+str(round(entropy_weight[0][2].item(),4))+'_'+str(round(S[0][2].item(),4))+
+                          '_Trans_'+str(round(entropy_weight[0][3].item(),4))+'_'+str(round(S[0][3].item(),4)))
+
         temp_loss["total"].append(loss.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["recon"].append(loss_recon.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["entropy"].append(loss_S.cpu().detach().numpy()) #store as per-sample loss
