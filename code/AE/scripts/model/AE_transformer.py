@@ -131,4 +131,3 @@ class DecoderBlock(nn.Module):
       
         return self.norm3(self.feed_forward(attended) + attended)
 
-    

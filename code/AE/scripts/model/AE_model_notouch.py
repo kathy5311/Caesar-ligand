@@ -5,10 +5,10 @@ from .AE_transformer import *
 class AutoEncoder(nn.Module):
     def __init__(self,
                  input_dim,
-                 latent_dim,
-                 c = 64, #latent dimension
+                 c = 32, #latent dimension
                  nhead = 4,
                  decoder_dim = 128,
+                 latent_dim = 4,
                  output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5},
                  nlayer_encoder=1,
                  nlayer_decoder=1):
@@ -46,7 +46,6 @@ class AutoEncoder(nn.Module):
         pred['numCH3'] = self.linear_numCH3(h)
         pred['ring'] = self.linear_ring(h)
         pred['hybrid'] = self.linear_hybrid(h)
-        #print('pred hybrid Dim:', pred['hybrid'].shape)
         
         #pred_border = self.linear_border(h_pair)
         return pred, z
@@ -54,12 +53,11 @@ class AutoEncoder(nn.Module):
 class EntropyModel(nn.Module):
     def __init__(self,
                  input_dim,
-                 latent_dim,
-                 c = 64, 
+                 c = 32, #latent dimension
                  nhead = 4,
                  decoder_dim = 128,
                  output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5, 'entropy':1},
-                 #latent vector dimension revision(08/19), ori:4
+                 latent_dim =4, #latent vector dimension revision(08/19), ori:4
                  nlayer_encoder=1,
                  nlayer_decoder=1):
         super().__init__()
@@ -75,40 +73,17 @@ class EntropyModel(nn.Module):
 
         # place holder?
         self.entropy_module = nn.ModuleList([nn.Linear(latent_dim, output_dim['entropy'])])
-        self.conf_entropy = nn.Linear(latent_dim, output_dim['entropy'])
-        self.trans_entropy = nn.Linear(latent_dim, output_dim['entropy'])
-        self.rot_entropy = nn.Linear(latent_dim, output_dim['entropy'])
-        self.vib_entropy = nn.Linear(latent_dim, output_dim['entropy'])
-        self.activation = nn.ReLU()
+        
         
     def forward(self, x):
         pred, z = self.autoencoder(x)
-        #z: (B,N_atom,latent_D)
-        '''
+
         for layer in self.entropy_module:
-            z = layer(z)'''
+            z = layer(z)
+        entropy = z
         
 
-        entropy_pred={}
-        entropy_pred['conf'] = self.conf_entropy(z)
-        entropy_pred['vib'] = self.vib_entropy(z)
-        entropy_pred['rot'] = self.rot_entropy(z)
-        entropy_pred['trans'] = self.trans_entropy(z)
-        #print(entropy_pred['trans'].shape)
-        
-        # ReLU
-        entropy_pred['conf'] = self.activation(entropy_pred['conf'])
-        entropy_pred['vib'] = self.activation(entropy_pred['vib'])
-        entropy_pred['rot'] = self.activation(entropy_pred['rot'])
-        entropy_pred['trans'] = self.activation(entropy_pred['trans'])
-
-        
-        
-        #print('conf',entropy_pred['conf'])
-        #print('conf shape',entropy_pred['conf'].shape)
-        
-        
-        return pred, entropy_pred
+        return pred, entropy
 
     
 
