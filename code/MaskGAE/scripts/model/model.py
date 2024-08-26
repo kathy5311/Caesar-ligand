@@ -248,14 +248,33 @@ class EntropyModel(nn.Module):
         self.device = device
         self.autoencoder = MaskGAE(args, device)
         self.entropy_module = nn.ModuleList([nn.Linear(args.latent_embedding_size, output_dim)])
+        self.conf_entropy = nn.Linear(args.latent_embedding_size, output_dim)
+        self.trans_entropy = nn.Linear(args.latent_embedding_size, output_dim)
+        self.rot_entropy = nn.Linear(args.latent_embedding_size, output_dim)
+        self.vib_entropy = nn.Linear(args.latent_embedding_size, output_dim)
         self.activation = nn.ReLU()
+    
     def forward(self, x):
         z, mu,logvar,posout, negout =self.autoencoder(x)
-        
+        '''
         for layer in self.entropy_module:
             z = layer(z)
-        entropy = self.activation(z)
+        entropy = self.activation(z)'''
+        #print('z shape',z.shape)
+        entropy_pred = {}
+        entropy_pred['conf'] = self.conf_entropy(z)
+        entropy_pred['vib'] = self.vib_entropy(z)
+        entropy_pred['rot'] = self.rot_entropy(z)
+        entropy_pred['trans'] = self.trans_entropy(z)
+        #print(entropy_pred['trans'].shape)
         
-        return entropy, mu, logvar, posout, negout
+        # ReLU
+        entropy_pred['conf'] = self.activation(entropy_pred['conf'])
+        entropy_pred['vib'] = self.activation(entropy_pred['vib'])
+        entropy_pred['rot'] = self.activation(entropy_pred['rot'])
+        entropy_pred['trans'] = self.activation(entropy_pred['trans'])
+        
+        #print('model entropy[trans]', entropy_pred['trans'].shape) #()
+        return entropy_pred, mu, logvar, posout, negout
         
         

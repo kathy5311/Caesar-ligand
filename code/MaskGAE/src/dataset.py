@@ -16,22 +16,26 @@ class DataSet(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         target = self.targets[index]
-        subset_mol, idx = target.split("_") #슬래쉬 기호 붙이기
-        subset = subset_mol[:-4]
-        file_idx = subset[6:]
+        #print(target)
+        subset, mol = target.split("|") #슬래쉬 기호 붙이기
+        num = subset[6:]
         
-        npzf = self.datapath + '/' + f"test_subset_rev0718_{file_idx}.npz"
+        npzf = self.datapath + '/' + f"test_subset_rev0718_{num}.npz"
         data = np.load(npzf, allow_pickle=True)
-        
+        idxs = data['tags'].tolist().index(target)
+        data=data['features'][idxs]
         try:
-            G, mask = make_graph(data['features'][index])
+            G, mask = make_graph(data)
         
         except:
-            return None, None, None
+            return None, None, None, None
         
         info = {'target': target}
         
-        return G, mask, info
+        #ent label load
+        S = torch.Tensor(data['ent'].astype(float))
+
+        return G, mask, info, S
             
 
 
@@ -91,7 +95,7 @@ def make_graph(data):
     g.ndata['xyz'] = xyz
     g.ndata['attr'] = torch.from_numpy(nodefeats)
     g.edata['attr'] = edgefeats
-
+    
     return g,mask
 
 def collate(samples):
@@ -99,14 +103,16 @@ def collate(samples):
     masks = []
     njs = []
     info = {'target':[]}
-
+    S = []
     nfull = 0
-    for g,m,i in samples:
+    for g,m,i,s in samples:
         if g == None: continue
+        #print('i',i)
         Gs.append(g)
         masks.append(m)
         njs.append(m.shape[1])
         nfull += m.shape[0]
+        S.append(s)
         for key in info: info[key].append(i[key])
 
     if len(Gs) == 0:
@@ -122,4 +128,6 @@ def collate(samples):
         mask[b,bi:bi+ni,:nj] = m
         bi += ni
     #print("origin",mask.shape)
-    return bG,  mask, info
+    #print("mask", mask.shape)
+    #print("S",S)
+    return bG,  mask, info, S
