@@ -1,4 +1,4 @@
-
+# 절대 건들이지 마
 import torch
 import numpy as np
 import time
@@ -65,8 +65,11 @@ class DataSet(torch.utils.data.Dataset):
             ring = torch.Tensor(data['ring'].astype(bool)).unsqueeze(dim=1)
             hybrid1hot = torch.Tensor(data['1hotHybrid'].astype(int))
             func1hot  = torch.Tensor(data['1hotFuncG'].astype(int))
-            S = torch.Tensor(data['ent'].astype(float)) # placeholder
             obt = np.concatenate([elems,func1hot,numH,aromatic,numCH3,ring,hybrid1hot],axis=1)
+            #0820 entropy label value add
+            #S = torch.Tensor(data['ent'].astype(float)) # placeholder
+            S=0.0 #0821 0.0으로 돌려놓음->nan 잡기 위해서
+            #print("S:",S)
             tag = self.targets[index]
             #print()
             
@@ -78,33 +81,21 @@ def collate(samples):
     
     try:
         samples = [s for s in samples if s[0] is not None]
-
+        #print(samples[0][0].shape)
         N = max([a.shape[0] for a,_,_ in samples])
-        #print([a.shape[0] for a,_,_ in samples])
-        #print(N)
         B = len(samples) #B
         C = samples[0][0].shape[1] #channel
-
         obt = torch.zeros((B,N,C))
         mask = torch.zeros((B,N))
         for i,(a,_,_) in enumerate(samples):
+
             obt[i,:a.shape[0],:] = a
             mask[i,:a.shape[0]] = 1.0
-        '''   
-        Slabel = torch.zeros((B,N_,C))
-        mask_ = torch.zeros((B,N_))
-        for i,(_,b,_) in enumerate(samples):
-            Slabel[i,:b.shape[0],:]=b
-            mask_[i,:b.shape[0]] = 1.0'''
-        Slabel=[i for _,i,_ in samples]
-        Slabel = torch.stack(Slabel)
-        #print(Slabel)
-
-        #print()
+        Slabel = torch.tensor([S for _,S,_ in samples])
+        #print('Slabel', Slabel)
         tags = [tag for _,_,tag in samples]
         info = {'tags':tags}
 
-    except Exception as e:
-        print(e)
+    except:
         return [],[],[],[]
-    return obt, mask, Slabel ,info
+    return obt, mask, Slabel, info
