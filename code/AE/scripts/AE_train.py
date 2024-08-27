@@ -15,8 +15,8 @@ device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
 class Arguments:
     def __init__(self):
-        self.batchsize = 5
-        self.maxepochs = 50
+        self.batchsize = 10
+        self.maxepochs = 100
         self.LR = 1.0e-4
         self.W_REG = 0.0001
         self.trainlist = '/home/kathy531/Caesar-lig/code/notebooks/total_train_0823.txt'
@@ -85,7 +85,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         
         loss_recon = (weight*lossfunc( obt, pred_concat)).sum() # B x N x C ->
         loss_recon = loss_recon / mask.sum()
-        #print('loss_recon', loss_recon)
+        print('entropy_weight.shape', entropy_weight.shape)
         loss_S = (lossfunc(S, entropy_weight)).sum()
         loss_S = loss_S / mask.sum()
 

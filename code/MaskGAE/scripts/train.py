@@ -15,7 +15,7 @@ import numpy as np
 from torch.utils import data
 
 
-args.modelname ='train_0822_t'
+args.modelname ='train_0827'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model
@@ -94,61 +94,32 @@ def run_an_epoch(model, optimizer, data_loader, train, verbose =False):
     
     for i,(G, mask, info, S) in enumerate(data_loader):
         if type(G) != list:
-            #entropy=entropy_pred
             entropy_pred, mu, logvar, posout, negout = model(G.to(device))
             if mu ==None: continue
-            #print('entropy_pred', entropy['conf'], entropy['conf'].shape)
             S = torch.stack(S)
-            #print('entropy',entropy)
-            #print(entropy['trans'].shape)
-            #print('mask',mask)
-            #print('mask shape',mask.shape)
             mask = mask.to(device)
+            S = torch.Tensor([1/20,1/10,1/40,1/10])*S
             S = S.to(device)
-            #entropy masking
-            
-            per_entropy_weight = torch.ones(1).to(device)
 
-            #print(per_entropy_weight.shape)
+            #entropy masking
+            per_entropy_weight = torch.ones(1).to(device)
             weight = torch.einsum('bij,k->bik', mask, per_entropy_weight)
             entropy_concat = torch.cat([entropy_pred['vib'],entropy_pred['rot'],entropy_pred['conf'],entropy_pred['trans']],dim=-1)
-            #print('entropy concat', entropy_concat.shape)
             mul_ent = weight*entropy_concat
-            #print('ent[conf]',entropy_concat, entropy_concat.shape)
-            #print('weight',weight,weight.shape)
-            #print('weight.sum',weight.sum())
-            #print('weight_1', weight_1, weight_1.shape)
-            #0823/ 마스킹 수정하자 근데 어떻게 하지....?
-            #print('ent[trans]',entropy_pred['trans'],entropy_pred['trans'].shape)
-            #print('mul_ent', mul_ent[0], mul_ent.shape)
             mul_ent = torch.sum(mul_ent,dim=1)
-            #print('mul_ent1',mul_ent,mul_ent.shape)
-            #print('sum ent', mul_ent[0], mul_ent.shape)
-            #print('S', S, S.shape)
-            #print()
+            
             #mask reproducing: fit on posout,negout shape
             mask_reduced = mask[:,:posout.size(0),:]
             mask_reduced = mask_reduced.to(device)
-            '''
-            print("posout size", posout.shape)
-            print("mask size", mask.shape)
-            print("mask_reduced size", mask_reduced.shape)
-            print("negout size", negout.shape)
-            '''
+           
             Ssum_pos = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,posout),dim=1)
             Ssum_neg = torch.sum(torch.einsum('bij,ik->bjk',mask_reduced,negout),dim=1)
-            #print(Ssum_pos, Ssum_neg)
-            #print(mu,logvar)
-            #lossKL = KL_div(mu, logvar)
-            #print('lossKL:',lossKL) 
-            lossCE = ce_loss(Ssum_pos,Ssum_neg)
-            #print('lossCE',lossCE)
+            
+            #loss
+            lossCE = ce_loss(Ssum_pos,Ssum_neg) #reduction='mean'
             lossMSE = nn.MSELoss()
             lossENT = lossMSE(S,mul_ent).sum()
-            lossENT = lossENT/ weight.sum()
-            #print('mask.sum',mask.sum())
-
-            #print('lossENT Norm',lossENT)
+            lossENT = lossENT/ mask.sum()
 
             loss = lossCE+lossENT #lossKL removal
             

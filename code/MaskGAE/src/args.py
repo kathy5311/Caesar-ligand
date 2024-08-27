@@ -2,12 +2,12 @@ class Argument:
     def __init__(self, modelname, dropout_rate=0.3):
         self.modelname = modelname
         self.dropout_rate = dropout_rate
-        self.nbatch =10
+        self.nbatch =30
         
-        self.maxepoch = 50
+        self.maxepoch = 100
         self.datapath = '/home/kathy531/Caesar-lig/data/new_npz0718'
-        self.dataf_train = '/home/kathy531/Caesar-lig/code/notebooks/check_train copy.txt'
-        self.dataf_valid = '/home/kathy531/Caesar-lig/code/notebooks/check_valid copy.txt'
+        self.dataf_train = '/home/kathy531/Caesar-lig/code/notebooks/total_train_0823.txt'
+        self.dataf_valid = '/home/kathy531/Caesar-lig/code/notebooks/total_valid_0823.txt'
         self.LR = 1.0e-5 #1.0e-4
         self.topk = 32
         self.n_input_feats = 38

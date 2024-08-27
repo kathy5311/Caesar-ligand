@@ -26,14 +26,14 @@ class DataSet(torch.utils.data.Dataset):
         data=data['features'][idxs]
         try:
             G, mask = make_graph(data)
-        
+            S = torch.Tensor(data['ent'].astype(float))
         except:
-            return None, None, None, None
+            return None, None, None, None 
         
         info = {'target': target}
         
         #ent label load
-        S = torch.Tensor(data['ent'].astype(float))
+        #S = torch.Tensor(data['ent'].astype(float))
 
         return G, mask, info, S
             
@@ -116,7 +116,7 @@ def collate(samples):
         for key in info: info[key].append(i[key])
 
     if len(Gs) == 0:
-        return [],[],[],[],[]
+        return [],[],[],[]
     
     bG = dgl.batch(Gs)
 

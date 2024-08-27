@@ -65,13 +65,12 @@ class Encoder(nn.Module):
                                     node_feat=node_feat,
                                     edge_feat=edge_feat,
                                     coord_feat=xyz)
-        #print("subidx",edge_index)
-        #print(G.edges())
+
         #Use subgraph
         sub_idx=(G.edge_ids(edge_index[0],edge_index[1]))
         G = G.edge_subgraph(sub_idx)
+        
         #latent transform layers
-        #print(node_feat.shape)
         mu = self.mu_transform(node_feat)
         logvar = self.logvar_transform(node_feat)
         z = self.reparametrize(mu,logvar)
@@ -147,28 +146,6 @@ class EdgeDecoder(nn.Module):
             return sigmoid(x)
         else:
             return x
-        
-'''          
-class MaskGAE(nn.Module):
-    def __init__(self, args, device ):
-        super().__init__()
-        self.device = device
-        
-        self.encoder = Encoder( encoder_args= args.encoder_args,
-                                n_input_feats= args.n_input_feats,
-                                channels = args.channels,
-                                dropout_rate= args.dropout_rate)
-        self.dropout = nn.Dropout(0.3)
-    
-    def decode(self, z):
-        adj_rec = torch.sigmoid(torch.matmul(z,z.t()))
-        return adj_rec
-
-    def foward(self, G: dgl.Gragph, do_dropout):
-        z = self.encoder(G, do_dropout)
-        pred = self.decode(z)
-        return pred,z
-'''
 
 def random_negative_sampler(edge_index, num_nodes,num_neg_samples):
     # torch.randint(low(포함), high(불포함), size(텐서사이즈))
@@ -219,16 +196,16 @@ class MaskGAE(nn.Module):
         if self.mask is not None:
             #instance는 함수와 같이 사용할 수 없다. 즉, 인스턴트를 먼저 생성한 후, forward메서드를 호출하여 마스킹 작업 수행
             remaining_edges, masked_edges = self.mask_edge(edge_index)
-        #print("remaining", remaining_edges)
+
         aug_edge_index,_ = add_self_loops(edge_index)
         neg_edges = self.negative_sampler(
             aug_edge_index,
             num_nodes = g.num_nodes(),
             num_neg_samples = masked_edges.view(2,-1).size(1),
         ).view_as(masked_edges)
-        #print('masked_edge', masked_edges)
+
         z, mu, logvar = self.encoder(g, remaining_edges)
-        #print(z,mu,logvar)
+
         pos_out = self.edge_decoder(
             z, masked_edges, sigmoid=False
         )
@@ -256,19 +233,8 @@ class EntropyModel(nn.Module):
     
     def forward(self, x):
         z, mu,logvar,posout, negout =self.autoencoder(x)
-        '''
-        for layer in self.entropy_module:
-            z = layer(z)
-        entropy = self.activation(z)'''
-        #print('z shape',z.shape)
         
         entropy_pred = {}
-        '''
-        entropy_pred['conf'] = self.conf_entropy(z)
-        entropy_pred['vib'] = self.vib_entropy(z)
-        entropy_pred['rot'] = self.rot_entropy(z)
-        entropy_pred['trans'] = self.trans_entropy(z)'''
-        #print(entropy_pred['trans'].shape)
         for i,fc in enumerate(self.rot_entropy):
             entropy_pred['rot']=fc(z)
         for i,fc in enumerate(self.conf_entropy):
