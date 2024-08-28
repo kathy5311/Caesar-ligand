@@ -15,7 +15,7 @@ device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
 class Arguments:
     def __init__(self):
-        self.batchsize = 10
+        self.batchsize = 30
         self.maxepochs = 100
         self.LR = 1.0e-4
         self.W_REG = 0.0001
