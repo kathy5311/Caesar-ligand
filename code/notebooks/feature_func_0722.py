@@ -108,7 +108,9 @@ class NodeFeat:
     # Aromatic, NumTermCH3, NumRing, GetHybrid, FuncG
     smiles: str
     mol: Chem.Mol = field(init=False)
-    
+    check_list: list =['fr_lactone','fr_amide','fr_ester','fr_C=S','fr_phos_acid','fr_alkyl_carbamate','fr_urea','fr_sulfone','fr_sulfone2','fr_ketone','fr_ether','fr_Al_OH','fr_Ar_OH']
+
+    defaultPatternFileName: str =('FragmentsDescriptors.csv')
     def __post_init__(self):
         self.mol = Chem.MolFromSmiles(self.smiles)
     
@@ -128,7 +130,7 @@ class NodeFeat:
     
     def Hybrid(self, hiv: NodeOneHot) -> List[List[int]]:
         return [hiv.OneHotHybrid[atom.GetHybridization()] for atom in self.mol.GetAtoms()]
-    
+    '''
     def get_substructure_atoms(self, smarts_pattern:NodeOneHot) -> List[int]:
         pattern = Chem.MolFromSmarts(smarts_pattern)
         matches = self.mol.GetSubstructMatches(pattern)
@@ -176,9 +178,65 @@ class NodeFeat:
                      "Ketone":Ketone_atoms,
                      "Ether":Ether_atoms,
                      "Unknown": unknown_atoms}
-            
+    '''     
+    def _CountMatches(self,patt,unique=True):
+      return self.mol.GetSubstructMatches(patt,uniquify=unique)
+    
+    
+    def _LoadPatterns(self,fileName=None):
+        fns=[]
+        if fileName is None:
+            fileName = self.defaultPatternFileName
+        try:
+            #print(fileName)
+            inF = open(fileName,'r')
+        except IOError:
+            raise IOError
+        else:
+            for line in inF.readlines():
+                #print(line)
+                if len(line) and line[0] != '#':
+                    splitL = line.split('\t')
+                    if len(splitL)>=3:
+                        name = splitL[0]
+                        if name not in self.check_list: continue
+                        descr = splitL[1]
+                        sma = splitL[2]
+                        descr=descr.replace('"','')
+                        ok=1
+                        try:
+                            patt = Chem.MolFromSmarts(sma) #smart -> mol
+                        except:
+                            ok=0
+                        else:
+                            if not patt or patt.GetNumAtoms()==0: ok=0
+                        if not ok: raise ImportError#'Smarts %s could not be parsed'%(repr(sma))
+                        fn = lambda mol,countUnique=True,pattern=patt:_CountMatches(mol,pattern,unique=countUnique)
+                        fn.__doc__ = descr
+                        name = name.replace('=','_')
+                        name = name.replace('-','_')
+                        fns.append((name,fn))
+        return fns
+    
+    def FuncG_rev(fns,mol):
+        func_dict={}
+        known_atoms=[]
+        if fns is not None:
+            for name, fn in fns:
+                if name not in func_dict:
+                    func_dict[name]=[]
+                #print(fn)
+                for i in fn(mol):
+                    for j in i:
+                        func_dict[name].append(j)
+                        known_atoms.append(j)
+        total_atoms = [idx for idx in range(mol.GetNumAtoms())]
+        unknown_atoms = [idx for idx in total_atoms if idx not in known_atoms]
+        func_dict['unknown'] = unknown_atoms 
+        return func_dict
+    
     def OneHotFuncG(self, funclist:NodeOneHot) -> List[List[int]]:
-        func_list=self.FuncG(funclist)
+        func_list=self.FuncG_rev(funclist)
         one_hot=[[0]*len(funclist.func_listing) for _ in range(self.mol.GetNumAtoms())]
         for func, indices in func_list.items():
             func_idx = funclist.func_listing[func]
