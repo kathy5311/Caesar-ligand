@@ -59,14 +59,36 @@ def _LoadPatterns(fileName=None):
                     fns.append((name,fn))
     return fns
                     #print(fn)
-mol=Chem.MolFromSmiles('C=1CCCCC1')
+mol=Chem.MolFromSmiles('C1=CC(=CC=C1C(=O)N[C@@H](CCC(=O)O)C(=O)O)NCC2=CN=C3C(=N2)C(=O)NC(=N3)N')
 fns=_LoadPatterns(fileName='./FragmentsDescriptors.csv')
     
-
+'''
 for name,fn in fns:
-    print(fn(mol))
     print(name)
+    print(fn(mol))'''
+    
     #(exec('%s=fn'%(name))
     
 #fn=None
 
+#make dictionary
+def FuncG_rev(fns,mol):
+    func_dict={}
+    known_atoms=[]
+    if fns is not None:
+        for name, fn in fns:
+            if name not in func_dict:
+                func_dict[name]=[]
+            #print(fn)
+            for i in fn(mol):
+                for j in i:
+                    func_dict[name].append(j)
+                    known_atoms.append(j)
+    total_atoms = [idx for idx in range(mol.GetNumAtoms())]
+    unknown_atoms = [idx for idx in total_atoms if idx not in known_atoms]
+    func_dict['unknown'] = unknown_atoms 
+    return func_dict
+print(FuncG_rev(fns,mol))       
+            
+            
+        
