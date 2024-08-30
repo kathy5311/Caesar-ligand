@@ -3,8 +3,8 @@ from typing import List, Tuple
 import numpy as np
 import sys
 from rdkit import Chem
-from rdkit.Chem import Draw, PandasTools
-import pandas as pd
+#from rdkit.Chem import Draw, PandasTools
+#import pandas as pd
 from rdkit.Chem import Descriptors
 from rdkit.ML.Descriptors import MoleculeDescriptors
 from rdkit.Chem import rdMolDescriptors
@@ -62,7 +62,7 @@ class NodeOneHot:
         rdchem.HybridizationType.SP3D: [0,0,0,0,1],
         rdchem.HybridizationType.SP3D2: [0,0,0,0,1]
     })
-    
+    '''
     func_type: dict = field(default_factory= lambda: {
         'LinearAmide' : "[NX3]!@;-[CX3]=[OX1]",  # linear amide
         'LinearEster' : "[O]!@;-[CX3]=[OX1]",  # linear ester
@@ -79,24 +79,22 @@ class NodeOneHot:
         'sulfonate' : "[R][S](=O)(=O)[O-]", #sulfonate
         'ketone' : "[#6][CX3](=[OX1])[#6]", # ketone
         'ether' : "[C][OX2][C]" # ether
-    })
+    })'''
     
-    func_listing: dict = field(default_factory= lambda: {'LinearAmide':0, #아마이드가 합성이 쉽다.
-               'LinearEster':1,
-               'LinearThioamide':2,
-               'LinearThioester':3,
-               'CyclicAmide':4,
-               'CyclicEster':5
-               ,'CyclicThioamide':6
-               ,'CyclicThioester':7
-               ,'Alcohol':8
-               ,'Phosphonate':9
-               ,'Carbamate':10
-               ,'Urea':11
-               ,'Sulfonate':12
-               ,'Ketone':13
-               ,'Ether':14
-               ,'Unknown':15})
+    func_listing: dict = field(default_factory= lambda: {'fr_Al_OH':0, #아마이드가 합성이 쉽다.
+               'fr_Ar_OH':1,
+               'fr_ester':2,
+               'fr_ketone':3,
+               'fr_ether':4,
+               'fr_amide':5
+               ,'fr_C_S':6
+               ,'fr_sulfone':7
+               ,'fr_sulfone2':8
+               ,'fr_urea':9
+               ,'fr_lactone':10
+               ,'fr_phos_acid':11
+               ,'fr_alkyl_carbamate':12
+               ,'unknown':13})
     
     is_aromatic: List[bool] = field(default_factory= lambda: [True])
     
@@ -108,9 +106,7 @@ class NodeFeat:
     # Aromatic, NumTermCH3, NumRing, GetHybrid, FuncG
     smiles: str
     mol: Chem.Mol = field(init=False)
-    check_list: list =['fr_lactone','fr_amide','fr_ester','fr_C=S','fr_phos_acid','fr_alkyl_carbamate','fr_urea','fr_sulfone','fr_sulfone2','fr_ketone','fr_ether','fr_Al_OH','fr_Ar_OH']
 
-    defaultPatternFileName: str =('FragmentsDescriptors.csv')
     def __post_init__(self):
         self.mol = Chem.MolFromSmiles(self.smiles)
     
@@ -178,15 +174,17 @@ class NodeFeat:
                      "Ketone":Ketone_atoms,
                      "Ether":Ether_atoms,
                      "Unknown": unknown_atoms}
-    '''     
+    
     def _CountMatches(self,patt,unique=True):
       return self.mol.GetSubstructMatches(patt,uniquify=unique)
     
     
     def _LoadPatterns(self,fileName=None):
         fns=[]
+        check_list: list =['fr_lactone','fr_amide','fr_ester','fr_C=S','fr_phos_acid','fr_alkyl_carbamate','fr_urea','fr_sulfone','fr_sulfone2','fr_ketone','fr_ether','fr_Al_OH','fr_Ar_OH']
+        defaultPatternFileName: str =('/home/kathy531/Caesar-lig/code/rdkit/FragmentsDescriptors.csv')
         if fileName is None:
-            fileName = self.defaultPatternFileName
+            fileName = defaultPatternFileName
         try:
             #print(fileName)
             inF = open(fileName,'r')
@@ -199,7 +197,7 @@ class NodeFeat:
                     splitL = line.split('\t')
                     if len(splitL)>=3:
                         name = splitL[0]
-                        if name not in self.check_list: continue
+                        if name not in check_list: continue
                         descr = splitL[1]
                         sma = splitL[2]
                         descr=descr.replace('"','')
@@ -211,7 +209,7 @@ class NodeFeat:
                         else:
                             if not patt or patt.GetNumAtoms()==0: ok=0
                         if not ok: raise ImportError#'Smarts %s could not be parsed'%(repr(sma))
-                        fn = lambda mol,countUnique=True,pattern=patt:_CountMatches(mol,pattern,unique=countUnique)
+                        fn = lambda mol,countUnique=True,pattern=patt:self._CountMatches(mol,pattern,unique=countUnique)
                         fn.__doc__ = descr
                         name = name.replace('=','_')
                         name = name.replace('-','_')
@@ -233,15 +231,13 @@ class NodeFeat:
         total_atoms = [idx for idx in range(mol.GetNumAtoms())]
         unknown_atoms = [idx for idx in total_atoms if idx not in known_atoms]
         func_dict['unknown'] = unknown_atoms 
-        return func_dict
+        return func_dict'''
     
-    def OneHotFuncG(self, funclist:NodeOneHot) -> List[List[int]]:
-        func_list=self.FuncG_rev(funclist)
+    def OneHotFuncG(self, func_dict: dict,funclist:NodeOneHot) -> List[List[int]]:
+        func_list=func_dict
         one_hot=[[0]*len(funclist.func_listing) for _ in range(self.mol.GetNumAtoms())]
         for func, indices in func_list.items():
             func_idx = funclist.func_listing[func]
             for idx in indices:
                 one_hot[idx][func_idx]=1
         return one_hot
-    
-  

@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+import os
 import sys
 import multiprocessing as mp
 from rdkit import Chem
@@ -11,6 +13,77 @@ from rdkit.Chem import rdchem
 from feature_func_0722 import BondInfo, EdgeFeat, NodeOneHot, NodeFeat
 
 ELEMS_TYPE = ['C','O','N','P','S','Br','I','F','Cl']
+
+def CountMatches(mol,patt,unique=True):
+    return mol.GetSubstructMatches(patt,uniquify=unique)
+    
+    
+def LoadPatterns(fileName=None):
+    fns=[]
+    check_list: list =['fr_lactone','fr_amide','fr_ester','fr_C=S','fr_phos_acid','fr_alkyl_carbamate','fr_urea','fr_sulfone','fr_sulfone2','fr_ketone','fr_ether','fr_Al_OH','fr_Ar_OH']
+    defaultPatternFileName: str =('/home/kathy531/Caesar-lig/code/rdkit/FragmentsDescriptors.csv')
+    if fileName is None:
+        fileName = defaultPatternFileName
+    try:
+        #print(fileName)
+        inF = open(fileName,'r')
+    except IOError:
+        raise IOError
+    else:
+        for line in inF.readlines():
+            #print(line)
+            if len(line) and line[0] != '#':
+                splitL = line.split('\t')
+                if len(splitL)>=3:
+                    name = splitL[0]
+                    if name not in check_list: continue
+                    descr = splitL[1]
+                    sma = splitL[2]
+                    descr=descr.replace('"','')
+                    ok=1
+                    try:
+                        patt = Chem.MolFromSmarts(sma) #smart -> mol
+                    except:
+                        ok=0
+                    else:
+                        if not patt or patt.GetNumAtoms()==0: ok=0
+                    if not ok: raise ImportError#'Smarts %s could not be parsed'%(repr(sma))
+                    fn = lambda mol,countUnique=True,pattern=patt:CountMatches(mol,pattern,unique=countUnique)
+                    fn.__doc__ = descr
+                    name = name.replace('=','_')
+                    name = name.replace('-','_')
+                    fns.append((name,fn))
+    return fns
+    
+def FuncG_rev(fns,mol):
+    func_dict={}
+    known_atoms=[]
+    if fns is not None:
+        for name, fn in fns:
+            if name not in func_dict:
+                func_dict[name]=[]
+            #print(fn)
+            for i in fn(mol):
+                for j in i:
+                    func_dict[name].append(j)
+                    known_atoms.append(j)
+    total_atoms = [idx for idx in range(mol.GetNumAtoms())]
+    unknown_atoms = [idx for idx in total_atoms if idx not in known_atoms]
+    func_dict['unknown'] = unknown_atoms 
+    #print('func_dict',func_dict)
+    return func_dict
+'''
+def OneHotFuncG( mol,funclist):
+    #func_list=FuncG_rev(funclist,mol)
+    print(funclist)
+    one_hot=[[0]*len(funclist.keys()) for _ in range(mol.GetNumAtoms())]
+    print(one_hot)
+    for func, indices in funclist.items():
+        func_idx = funclist[func]
+        print('func_idx',func_idx)
+        for idx in func_idx:
+            one_hot[func_idx][func_idx]=1
+    return one_hot'''
 
 # Use smiles function(Using .sdf file)
 def methyl(sdf_path, j):   
@@ -30,7 +103,7 @@ def methyl(sdf_path, j):
     for mol in supplier:
         if mol is not None:
             smiles = Chem.MolToSmiles(mol, canonical=True)
-    
+
             one_hot_node=NodeOneHot()
             node= NodeFeat(smiles)
             one_hot_edge=BondInfo()
@@ -46,7 +119,12 @@ def methyl(sdf_path, j):
             #Hybrid
             Hybrid_check = node.Hybrid(one_hot_node)
             #OneHotFuncG
-            FuncG_check = node.OneHotFuncG(one_hot_node)
+            
+            fns = LoadPatterns(fileName='/home/kathy531/Caesar-lig/code/rdkit/FragmentsDescriptors.csv')
+            func_dict= FuncG_rev(fns,mol)
+            FuncG_check = node.OneHotFuncG(func_dict,one_hot_node)
+            #print('Func_check', FuncG_check)
+            #FuncG_check = OneHotFuncG(mol, func_dict)
             
             #Edge
             #BndIdx
@@ -57,6 +135,8 @@ def methyl(sdf_path, j):
             Bond_info = edge.BndInfo(one_hot_edge)
             #Rotbond
             Num_rot = edge.NumRot()
+            
+            
     
     return Aromatic_atom, calCH3, Ring_check, Hybrid_check, FuncG_check, Bond_idx, Is_conju, Bond_info, Num_rot
     
@@ -103,7 +183,7 @@ def read_npz(npzfile, outf, j):
 
 def multiP(j):
     npzfile ='subset_%d_new_rev.prop.npz'%(j)
-    read_npz(npzfile, '../new_npz0718/test_subset_rev0718_%d.npz'%(j),j)
+    read_npz(npzfile, '/home/kathy531/Caesar-lig/data/new_npz0830/subset_%d_0830.npz'%(j),j)
     print(f"Done{j}")
 
 
@@ -111,5 +191,6 @@ def multiP(j):
 
 if __name__ == "__main__":
     #자동화 하려면 subset의 숫자만 따와서 for문 돌리기
-    with mp.Pool(processes=92) as pool:
+    torch.set_num_threads( int( os.getenv('SLURM_CPUS_PER_TASK', 4) ) )
+    with mp.Pool(processes=30) as pool:
         pool.map(multiP, range(1,31))
