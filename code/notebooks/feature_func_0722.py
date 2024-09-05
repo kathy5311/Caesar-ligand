@@ -62,24 +62,6 @@ class NodeOneHot:
         rdchem.HybridizationType.SP3D: [0,0,0,0,1],
         rdchem.HybridizationType.SP3D2: [0,0,0,0,1]
     })
-    '''
-    func_type: dict = field(default_factory= lambda: {
-        'LinearAmide' : "[NX3]!@;-[CX3]=[OX1]",  # linear amide
-        'LinearEster' : "[O]!@;-[CX3]=[OX1]",  # linear ester
-        'LinearThioamide' : "[NX3]!@;-[CX3]=[SX1]",  # linear thioamide
-        'LinearThioester' : "[CX3](=S)[OX2]", # linear thioester
-        'CyclicAmide' : "[CX3](=O)@[NH]", # cyclic amide
-        'CyclicEster' : "[CX3](=O)@[O]", # cyclic ester
-        'CyclicThioamide' : "[CX3](=[SX1])@[NH]", # cyclic thioamide
-        'CyclicThioester' : "[CX3]@[CX3](=S)[OX2]", # cyclic thioester
-        'alcohol' : "[OX2H][CX4]", # alcohol
-        'phosphonate' : "[PX4;$([H1]),$([H0][#6])](=[OX1])([$([OX2H]),$([OX1-])])[$([OX2H]),$([OX1-])]" # phosphonate
-        ,'carbamate' : "[NX3][CX3](=[OX1])[OX2R]", # carbamate
-        'urea' : "[NH2][C](=[O])[NH2]", # urea
-        'sulfonate' : "[R][S](=O)(=O)[O-]", #sulfonate
-        'ketone' : "[#6][CX3](=[OX1])[#6]", # ketone
-        'ether' : "[C][OX2][C]" # ether
-    })'''
     
     func_listing: dict = field(default_factory= lambda: {'fr_Al_OH':0, #아마이드가 합성이 쉽다.
                'fr_Ar_OH':1,
@@ -126,6 +108,15 @@ class NodeFeat:
     
     def Hybrid(self, hiv: NodeOneHot) -> List[List[int]]:
         return [hiv.OneHotHybrid[atom.GetHybridization()] for atom in self.mol.GetAtoms()]
+    
+    def OneHotFuncG(self, func_dict: dict,funclist:NodeOneHot) -> List[List[int]]:
+        func_list=func_dict
+        one_hot=[[0]*len(funclist.func_listing) for _ in range(self.mol.GetNumAtoms())]
+        for func, indices in func_list.items():
+            func_idx = funclist.func_listing[func]
+            for idx in indices:
+                one_hot[idx][func_idx]=1
+        return one_hot
     '''
     def get_substructure_atoms(self, smarts_pattern:NodeOneHot) -> List[int]:
         pattern = Chem.MolFromSmarts(smarts_pattern)
@@ -233,11 +224,4 @@ class NodeFeat:
         func_dict['unknown'] = unknown_atoms 
         return func_dict'''
     
-    def OneHotFuncG(self, func_dict: dict,funclist:NodeOneHot) -> List[List[int]]:
-        func_list=func_dict
-        one_hot=[[0]*len(funclist.func_listing) for _ in range(self.mol.GetNumAtoms())]
-        for func, indices in func_list.items():
-            func_idx = funclist.func_listing[func]
-            for idx in indices:
-                one_hot[idx][func_idx]=1
-        return one_hot
+

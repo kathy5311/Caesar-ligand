@@ -36,7 +36,7 @@ class DataSet(torch.utils.data.Dataset):
         subset, mol = target.split("|")
         num=subset[6:]
         #print('num: ',num)
-        npzf = self.data+f"test_subset_rev0718_{num}.npz"
+        npzf = self.data+f"subset_{num}_0830.npz"
 
         data=np.load(npzf, allow_pickle=True)
         idx = data['tags'].tolist().index(target)

@@ -24,10 +24,10 @@ class Arguments:
 
 args = Arguments()
 
-set_params = {'datanpz':'/home/kathy531/Caesar-lig/data/new_npz0718/' #npz 경로 추가
+set_params = {'datanpz':'/home/kathy531/Caesar-lig/data/new_npz0830/' #npz 경로 추가
               }#use default
 
-model_params = {'input_dim': 38, #9 elems + 16 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
+model_params = {'input_dim': 36, #9 elems + 14 funcs + 5 numH + 1 aromatic + 1 numCH3 + 1 ring + 5 hybrid
                 'latent_dim': 16
                 }
 
@@ -48,7 +48,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
     lossfunc = nn.MSELoss( reduction='none' )
 
     for i, (obt, mask, S, info) in enumerate(loader):
-        print(i, "starting epoch!")
+        #print(i, "starting epoch!")
         start_time = time.time()
         if len(obt) == 0: continue
         if train: optimizer.zero_grad()
@@ -72,7 +72,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         weight = torch.einsum('ij,k->ijk',mask,per_category_weight)
         #print('weight', weight)
         pred_concat = torch.cat([pred['elem'],pred['func'],pred['numH'],pred['aromatic'],pred['numCH3'],pred['ring'],pred['hybrid']],dim=-1) # channel dimension
-
+        #print("pred-concat",pred_concat.shape)
         #add entropy part
         per_entropy_weight = torch.ones(1).to(device)
         weight_entropy = torch.einsum('ij,k->ijk',mask,per_entropy_weight)
@@ -85,7 +85,7 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         
         loss_recon = (weight*lossfunc( obt, pred_concat)).sum() # B x N x C ->
         loss_recon = loss_recon / mask.sum()
-        print('entropy_weight.shape', entropy_weight.shape)
+        #print('entropy_weight.shape', entropy_weight.shape)
         loss_S = (lossfunc(S, entropy_weight)).sum()
         loss_S = loss_S / mask.sum()
 
@@ -124,8 +124,8 @@ def run_an_epoch(loader,model,optimizer,epoch,train,verbose=False):
         temp_loss["total"].append(loss.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["recon"].append(loss_recon.cpu().detach().numpy()) #store as per-sample loss
         temp_loss["entropy"].append(loss_S.cpu().detach().numpy()) #store as per-sample loss
-    print(f"Data loading time: {data_loading_time:.4f}")
-    print(f"Processing time: {processing_time: .4f}")
+    #print(f"Data loading time: {data_loading_time:.4f}")
+    #print(f"Processing time: {processing_time: .4f}")
     return temp_loss
 
 def load_model(modelname):

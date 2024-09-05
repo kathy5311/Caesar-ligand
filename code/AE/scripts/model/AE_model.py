@@ -9,7 +9,7 @@ class AutoEncoder(nn.Module):
                  c = 64, #latent dimension
                  nhead = 4,
                  decoder_dim = 128,
-                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5},
+                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':14, 'elem':9, 'numH':5},
                  nlayer_encoder=1,
                  nlayer_decoder=1):
         super().__init__()
@@ -58,7 +58,7 @@ class EntropyModel(nn.Module):
                  c = 64, 
                  nhead = 4,
                  decoder_dim = 128,
-                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':16, 'elem':9, 'numH':5, 'entropy':1},
+                 output_dim = {'aromatic':1, 'numCH3':1,'ring':1,'hybrid1hot':5,'func':14, 'elem':9, 'numH':5, 'entropy':1},
                  #latent vector dimension revision(08/19), ori:4
                  nlayer_encoder=1,
                  nlayer_decoder=1):

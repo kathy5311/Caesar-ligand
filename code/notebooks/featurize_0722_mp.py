@@ -72,18 +72,6 @@ def FuncG_rev(fns,mol):
     func_dict['unknown'] = unknown_atoms 
     #print('func_dict',func_dict)
     return func_dict
-'''
-def OneHotFuncG( mol,funclist):
-    #func_list=FuncG_rev(funclist,mol)
-    print(funclist)
-    one_hot=[[0]*len(funclist.keys()) for _ in range(mol.GetNumAtoms())]
-    print(one_hot)
-    for func, indices in funclist.items():
-        func_idx = funclist[func]
-        print('func_idx',func_idx)
-        for idx in func_idx:
-            one_hot[func_idx][func_idx]=1
-    return one_hot'''
 
 # Use smiles function(Using .sdf file)
 def methyl(sdf_path, j):   
