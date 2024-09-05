@@ -15,7 +15,7 @@ import numpy as np
 from torch.utils import data
 
 
-args.modelname ='train_0827'
+args.modelname ='GAEtrain_0904'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model

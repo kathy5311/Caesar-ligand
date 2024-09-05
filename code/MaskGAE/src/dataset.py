@@ -20,7 +20,7 @@ class DataSet(torch.utils.data.Dataset):
         subset, mol = target.split("|") #슬래쉬 기호 붙이기
         num = subset[6:]
         
-        npzf = self.datapath + '/' + f"test_subset_rev0718_{num}.npz"
+        npzf = self.datapath + '/' + f"subset_{num}_0830.npz"
         data = np.load(npzf, allow_pickle=True)
         idxs = data['tags'].tolist().index(target)
         data=data['features'][idxs]
@@ -85,7 +85,6 @@ def make_graph(data):
     for i in numH:
         sub=[i[0]-1,i[1]]
         numH_rev.append(sub)
-    #print(numH)
     numH = torch.tensor(numH_encoding(numH_rev)).float()[:None]
 
     nodefeats=[elems, aromatic, numCH3, ring, FuncG, Hybrid, numH]
@@ -127,7 +126,4 @@ def collate(samples):
         ni, nj = m.shape
         mask[b,bi:bi+ni,:nj] = m
         bi += ni
-    #print("origin",mask.shape)
-    #print("mask", mask.shape)
-    #print("S",S)
     return bG,  mask, info, S
