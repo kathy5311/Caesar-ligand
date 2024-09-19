@@ -6,7 +6,7 @@ class Argument:
         
         self.maxepoch = 100
         self.datapath = '/home/kathy531/Caesar-lig/data/new_npz0830'
-        self.dataf_train = '/home/kathy531/Caesar-lig/code/notebooks/total_train_0823.txt'
+        self.dataf_train = '/home/kathy531/Caesar-lig/code/notebooks/total_valid_0823.txt'
         self.dataf_valid = '/home/kathy531/Caesar-lig/code/notebooks/total_valid_0823.txt'
         self.LR = 1.0e-5 #1.0e-4
         self.topk = 32

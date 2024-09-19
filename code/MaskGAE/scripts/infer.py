@@ -14,7 +14,7 @@ import numpy as np
 from torch.utils import data
 
 
-args.modelname ='train_0822_t'
+args.modelname ='GAEtrain_0904'
 def load_model(args_in, silent =False):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     ## model
@@ -62,6 +62,7 @@ def run_an_epoch(model, data_loader, out_file,train=False):
                 #print('mask',mask)
                 #print('mask shape',mask.shape)
                 mask = mask.to(device)
+                S = torch.Tensor([1/20,1/10,1/40,1/10])*S
                 S = S.to(device)
                 #entropy masking
 
@@ -113,7 +114,7 @@ def main():
     model =load_model(args)
     valid_loader = load_data(args)
     print('Start Inference')
-    out_file = 'infer_0827.txt'
+    out_file = 'infer_0919.txt'
     with torch.no_grad():
         model.eval()
         run_an_epoch(model, valid_loader, out_file,train=False)
